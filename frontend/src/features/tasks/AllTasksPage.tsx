@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ListTodo, Plus, Search } from "lucide-react";
+import { ListTodo, ListPlus, Plus, Search } from "lucide-react";
 import { api } from "../../api/client";
 import type { Area, Project, Task, TaskListResponse } from "../../api/types";
 import {
@@ -86,6 +86,17 @@ export default function AllTasksPage() {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       toast.push("تسک حذف شد.");
     },
+  });
+
+  const addToSprint = useMutation({
+    mutationFn: (t: Task) =>
+      api("/v1/sprints/current/tasks", { method: "POST", body: { items: [{ task_id: t.id }] } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["sprint"] });
+      toast.push("به اسپرینت جاری اضافه شد.");
+    },
+    onError: (e) => toast.push((e as Error).message, "error"),
   });
 
   const items = data?.items ?? [];
@@ -217,6 +228,18 @@ export default function AllTasksPage() {
                 {fmtDuration(t.logged_minutes)}
                 {t.estimate_minutes ? ` / ${fmtDuration(t.estimate_minutes)}` : ""}
               </span>
+              {!t.active_sprint_id && (
+                <button
+                  className="btn-ghost !p-1.5 text-slate-400 hover:!text-indigo-500"
+                  title="افزودن به اسپرینت جاری"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    addToSprint.mutate(t);
+                  }}
+                >
+                  <ListPlus size={16} />
+                </button>
+              )}
               <button
                 className="btn-ghost !p-1.5 text-slate-400 hover:!text-red-500"
                 onClick={(e) => {

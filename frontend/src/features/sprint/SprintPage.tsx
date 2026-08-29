@@ -190,6 +190,7 @@ function AddTasksModal({ open, onClose, sprint }: { open: boolean; onClose: () =
                     className="h-4 w-4 accent-indigo-600"
                   />
                   <span className="flex-1 font-medium">{t.title}</span>
+                  {t.issue_key && <span className="chip tnum shrink-0 bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">{t.issue_key}</span>}
                   <AreaChip name={t.project_name ?? t.area_name} color={t.area_color} />
                   {t.estimate_minutes && <span className="tnum text-xs text-slate-400">{fmtDuration(t.estimate_minutes)}</span>}
                 </label>

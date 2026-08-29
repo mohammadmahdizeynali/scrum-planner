@@ -855,6 +855,7 @@ function EntryModal({
                     }}
                   >
                     <span className="min-w-0 flex-1 truncate font-medium">{t.title}</span>
+                    {t.issue_key && <span className="chip tnum shrink-0 bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">{t.issue_key}</span>}
                     <span className="chip bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300">
                       {t.project_name ?? t.area_name ?? "مستقل"}
                     </span>
