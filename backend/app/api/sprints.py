@@ -102,6 +102,8 @@ def remove_task(sprint_id: uuid.UUID, task_id: uuid.UUID, user: User = Depends(g
     sprint = db.get(Sprint, sprint_id)
     if sprint is None or sprint.user_id != user.id:
         raise HTTPException(status_code=404, detail="اسپرینت پیدا نشد.")
+    if sprint.status != "active":
+        raise HTTPException(status_code=409, detail="این اسپرینت بسته شده است؛ برای تغییر، ابتدا بازگشایی کنید.")
     sprint_service.remove_task_from_sprint(db, user, sprint, task_id)
     return _detail(db, sprint)
 

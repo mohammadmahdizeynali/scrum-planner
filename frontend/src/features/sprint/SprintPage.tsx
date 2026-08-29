@@ -34,7 +34,7 @@ function TaskCard({
   task: Task;
   source: string;
   onOpen: () => void;
-  onRemove: () => void;
+  onRemove?: () => void;
   dragging: boolean;
 }) {
   return (
@@ -44,16 +44,18 @@ function TaskCard({
     >
       <div className="mb-1.5 flex items-start justify-between gap-2">
         <div className="text-sm font-semibold leading-6">{task.title}</div>
-        <button
-          className="btn-ghost !p-1 text-slate-400 hover:!text-red-500"
-          title="خروج از اسپرینت"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-        >
-          <X size={15} />
-        </button>
+        {onRemove && (
+          <button
+            className="btn-ghost !p-1 text-slate-400 hover:!text-red-500"
+            title="خروج از اسپرینت"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+          >
+            <X size={15} />
+          </button>
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
         {task.issue_key && <span className="chip tnum bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">{task.issue_key}</span>}
@@ -73,11 +75,11 @@ function TaskCard({
   );
 }
 
-function DraggableTask({ task, source, onOpen, onRemove }: { task: Task; source: string; onOpen: () => void; onRemove: () => void }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: task.id, data: { from: task.status } });
+function DraggableTask({ task, source, closed, onOpen, onRemove }: { task: Task; source: string; closed: boolean; onOpen: () => void; onRemove: () => void }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: task.id, disabled: closed, data: { from: task.status } });
   return (
-    <div ref={setNodeRef} {...listeners} {...attributes} className={isDragging ? "opacity-40" : ""}>
-      <TaskCard task={task} source={source} onOpen={onOpen} onRemove={onRemove} dragging={isDragging} />
+    <div ref={setNodeRef} {...(closed ? {} : listeners)} {...(closed ? {} : attributes)} className={isDragging ? "opacity-40" : ""}>
+      <TaskCard task={task} source={source} onOpen={onOpen} onRemove={closed ? undefined : onRemove} dragging={isDragging} />
     </div>
   );
 }
@@ -87,6 +89,7 @@ function Column({
   label,
   icon,
   members,
+  closed,
   onOpenTask,
   onRemoveTask,
 }: {
@@ -94,15 +97,16 @@ function Column({
   label: string;
   icon: JSX.Element;
   members: { source: string; task: Task }[];
+  closed: boolean;
   onOpenTask: (t: Task) => void;
   onRemoveTask: (t: Task) => void;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: status });
+  const { setNodeRef, isOver } = useDroppable({ id: status, disabled: closed });
   return (
     <div
       ref={setNodeRef}
       className={`flex min-h-[200px] flex-col gap-2 rounded-2xl border p-3 transition ${
-        isOver
+        isOver && !closed
           ? "border-indigo-400 bg-indigo-50/60 dark:bg-indigo-500/10"
           : "border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/60"
       }`}
@@ -113,7 +117,7 @@ function Column({
         <span className="chip bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300">{members.length}</span>
       </div>
       {members.map(({ source, task }) => (
-        <DraggableTask key={task.id} task={task} source={source} onOpen={() => onOpenTask(task)} onRemove={() => onRemoveTask(task)} />
+        <DraggableTask key={task.id} task={task} source={source} closed={closed} onOpen={() => onOpenTask(task)} onRemove={() => onRemoveTask(task)} />
       ))}
       {members.length === 0 && <div className="py-6 text-center text-xs text-slate-400">—</div>}
     </div>
@@ -383,7 +387,18 @@ export default function SprintPage() {
     onError: (e) => toast.push((e as Error).message, "error"),
   });
 
+  const reopen = useMutation({
+    mutationFn: () => api(`/v1/sprints/${sprint!.id}/reopen`, { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sprint"] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      toast.push("اسپرینت بازگشایی شد؛ اکنون می‌توانید تغییرات را اعمال کنید.");
+    },
+    onError: (e) => toast.push((e as Error).message, "error"),
+  });
+
   const onDragEnd = (e: DragEndEvent) => {
+    if (sprint?.status === "closed") return;
     const from = (e.active.data.current as { from?: string } | undefined)?.from;
     const to = e.over?.id as string | undefined;
     if (from && to && from !== to) {
@@ -393,6 +408,7 @@ export default function SprintPage() {
 
   if (isLoading || !sprint) return <PageSpinner />;
 
+  const closed = sprint.status === "closed";
   const progressMax = Math.max(sprint.estimate_minutes, sprint.logged_minutes, 1);
 
   return (
@@ -400,7 +416,10 @@ export default function SprintPage() {
       <div className="card mb-5 p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="page-title">{sprint.name}</h1>
+            <h1 className="flex items-center gap-2">
+              <span className="page-title">{sprint.name}</span>
+              {closed && <span className="chip bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300">بسته‌شده</span>}
+            </h1>
             <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
               <span className="flex items-center gap-1">
                 <CalendarClock size={15} />
@@ -418,14 +437,27 @@ export default function SprintPage() {
             </div>
           </div>
           <div className="flex gap-2">
-            <button className="btn-secondary" onClick={() => setCloseOpen(true)}>
-              بستن اسپرینت
-            </button>
-            <button className="btn-primary" onClick={() => setAddOpen(true)}>
-              افزودن تسک
-            </button>
+            {closed ? (
+              <button className="btn-secondary" disabled={reopen.isPending} onClick={() => reopen.mutate()}>
+                بازگشایی اسپرینت
+              </button>
+            ) : (
+              <>
+                <button className="btn-secondary" onClick={() => setCloseOpen(true)}>
+                  بستن اسپرینت
+                </button>
+                <button className="btn-primary" onClick={() => setAddOpen(true)}>
+                  افزودن تسک
+                </button>
+              </>
+            )}
           </div>
         </div>
+        {closed && (
+          <div className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+            این اسپرینت بسته شده است؛ افزودن تسک و تغییر وضعیت‌ها غیرفعال است. اگر اصلاحی لازم دارید، بازگشایی کنید.
+          </div>
+        )}
         <div className="mt-4">
           <ProgressBar value={sprint.logged_minutes} max={progressMax} />
           <div className="mt-1 flex justify-between text-xs text-slate-400">
@@ -440,12 +472,18 @@ export default function SprintPage() {
       {sprint.members.length === 0 ? (
         <EmptyState
           icon={<ListPlus size={36} />}
-          title="اسپرینت این هفته خالی است"
-          hint="تسک‌ها را از بک‌لاگ (همه تسک‌ها) به این هفته اضافه کنید؛ هنگام افزودن می‌توانید برآوردشان را تنظیم کنید."
+          title={closed ? "این اسپرینت بسته شده است" : "اسپرینت این هفته خالی است"}
+          hint={
+            closed
+              ? "برای افزودن تسک یا اصلاح، ابتدا اسپرینت را بازگشایی کنید."
+              : "تسک‌ها را از بک‌لاگ (همه تسک‌ها) به این هفته اضافه کنید؛ هنگام افزودن می‌توانید برآوردشان را تنظیم کنید."
+          }
           action={
-            <button className="btn-primary mt-2" onClick={() => setAddOpen(true)}>
-              افزودن تسک
-            </button>
+            !closed ? (
+              <button className="btn-primary mt-2" onClick={() => setAddOpen(true)}>
+                افزودن تسک
+              </button>
+            ) : undefined
           }
         />
       ) : (
@@ -458,6 +496,7 @@ export default function SprintPage() {
                 label={col.label}
                 icon={col.icon}
                 members={byStatus[col.status] ?? []}
+                closed={closed}
                 onOpenTask={(t) => !draggingRef.current && setDetailTaskId(t.id)}
                 onRemoveTask={(t) => setRemoveTarget(t)}
               />

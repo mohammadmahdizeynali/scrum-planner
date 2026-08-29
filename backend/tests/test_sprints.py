@@ -34,6 +34,32 @@ def test_add_and_remove_task_updates_status(auth_client, project, task):
     assert t["status"] == "backlog"                        # Open → Backlog on removal
 
 
+def test_closed_sprint_blocks_membership_changes(auth_client, project):
+    s = auth_client.get("/api/v1/sprints/current").json()
+    if s["status"] == "closed":  # a previous test in this session may have closed it
+        auth_client.post(f"/api/v1/sprints/{s['id']}/reopen")
+
+    t = auth_client.post("/api/v1/tasks", json={"title": "member", "project_id": project["id"]}).json()
+    auth_client.post(f"/api/v1/sprints/{s['id']}/tasks", json={"items": [{"task_id": t["id"]}]})
+
+    r = auth_client.post(f"/api/v1/sprints/{s['id']}/close", json={"decisions": []})
+    assert r.status_code == 200
+
+    # closed sprint: no adding, no removing
+    r = auth_client.post(f"/api/v1/sprints/{s['id']}/tasks", json={"items": [{"task_id": t["id"]}]})
+    assert r.status_code == 409
+    r = auth_client.delete(f"/api/v1/sprints/{s['id']}/tasks/{t['id']}")
+    assert r.status_code == 409
+
+    r = auth_client.post(f"/api/v1/sprints/{s['id']}/reopen")
+    assert r.status_code == 200 and r.json()["status"] == "active"
+
+    t2 = auth_client.post("/api/v1/tasks", json={"title": "fresh"}).json()
+    r = auth_client.post(f"/api/v1/sprints/{s['id']}/tasks", json={"items": [{"task_id": t2["id"]}]})
+    assert r.status_code == 200
+    assert any(m["task"]["id"] == t2["id"] for m in r.json()["members"])
+
+
 def test_close_sprint_with_decisions(auth_client, project):
     # prepare: two tasks in sprint, one In Progress, one Open
     t1 = auth_client.post("/api/v1/tasks", json={"title": "carry me", "project_id": project["id"]}).json()

@@ -119,6 +119,7 @@
 | D64 | Prefix is locked once the area has keyed tasks (409 on change) to preserve key identity; duplicate prefixes rejected case-insensitively; format `^[A-Z][A-Z0-9]{1,9}$`. Existing (pre-feature) tasks are not retro-keyed — only new tasks after the prefix is set. | implemented |
 | D65 | Search matches issue keys: exact (`SBU-002`), sloppy (`sbu-2`, `sbu 2` → padded exact), and bare prefix (`SBU` → all) — in global search and All Tasks filter. | implemented |
 | D66 | Schema evolution: Alembic still deferred; a small idempotent startup migration (`ensure_schema_upgrades`) ALTERs live tables and creates the unique indexes (areas.key_prefix, tasks.issue_key). | implemented |
+| D67 | Closed sprints are read-only: adding/removing members is rejected server-side (409); the Sprint page shows a بسته‌شده badge, hides add/drag/remove, and swaps the close button for «بازگشایی اسپرینت» (reopen). Task-level edits (title/status via drawer, time logging) remain allowed — only sprint membership is frozen. | agreed (owner request) |
 
 ## Open questions for the owner (doc review)
 
