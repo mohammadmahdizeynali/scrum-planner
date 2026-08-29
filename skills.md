@@ -42,10 +42,11 @@
 - **Duration format (owner decision, 2026-08-29, final):** compact Latin `1h 15 min` /
   `2h` / `45 min` via `fmtDuration` — NEVER decimal hours, and NOT spelled-out Persian
   «ساعت و دقیقه» (owner rejected it as clunky; also an earlier template-literal typo leaked a
-  stray `}` into rendered text — check rendered output, not just types). Estimate/log inputs
-  use compact `h:mm` (`hmOf` + `parseDurationInput`, which also accepts legacy decimal like
-  `2.25`). Every duration shown anywhere flows through `fmtDuration` — no ad-hoc math in
-  components. **Duration pairs (logged vs estimate) use the slash form — `1h 15 min / 2h` via
+  stray `}` into rendered text — check rendered output, not just types). Estimate entry uses
+  the shared `DurationInput`: two boxes `[ h ] [ min ]` rendered **LTR (`dir="ltr"`)** so the
+  hour box sits LEFT of the minutes box even in the RTL app (owner-specified) — inside the RTL
+  flex, DOM order had flipped them. Every duration shown anywhere flows through `fmtDuration`;
+  every duration entered anywhere flows through `DurationInput`. **Duration pairs (logged vs estimate) use the slash form — `1h 15 min / 2h` via
   `fmtEstimateLogged` — never «از» between two Latin runs** (bidi-mixing looks broken; owner
   decision 2026-08-29). Reports estimate-vs-actual rows follow the same `X / Y` pattern.
 - Persian text search: try `pg_trgm` vs `to_tsvector('simple', …)` during phase 2/6; Persian

@@ -106,7 +106,7 @@ export default function AllTasksPage() {
   return (
     <main className="mx-auto max-w-5xl p-4 md:p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="page-title">همه تسک‌ها</h1>
+        <h1 className="page-title">انبار</h1>
         <div className="flex gap-2">
           <button className="btn-secondary" onClick={() => setFilter("sort", filters.sort === "manual" ? "updated" : "manual")}>
             {filters.sort === "manual" ? "ترتیب: دستی" : "ترتیب: آخرین تغییر"}

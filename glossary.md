@@ -24,7 +24,7 @@
 | Sprint close | بستن اسپرینت | Manual end-of-week action; per-task decisions + weekly report snapshot generation. |
 | Weekly report | گزارش هفتگی | Snapshot generated at sprint close (4 fixed sections). |
 | Monthly report | گزارش ماهانه | Aggregation over a Jalali month (e.g. Mordad), live-computed. |
-| Backlog | بک‌لاگ | Both a status (`Backlog`) and the All Tasks page's working mode. |
+| Backlog | بک‌لاگ | Both a status (`Backlog`) and the working mode of the **انبار** page (formerly «همه تسک‌ها», renamed to Storage at the owner's request). |
 
 ## Statuses (exact UI strings to finalize during implementation)
 

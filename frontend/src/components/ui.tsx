@@ -285,7 +285,7 @@ export function DurationInput({
   };
 
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <span className="inline-flex items-center gap-1.5" dir="ltr">
       <input
         className="input tnum !w-14 !px-2 text-center"
         inputMode="numeric"
