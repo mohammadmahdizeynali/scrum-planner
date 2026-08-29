@@ -471,7 +471,7 @@ export default function ReportsPage() {
         <EmptyState
           icon={<BarChart3 size={36} />}
           title={`${faMonth(jy, jm)} داده‌ای ندارد`}
-          hint="با ثبت زمان در تایم‌شیت، گزارش‌ها ساخته می‌شوند."
+          hint="با ثبت زمان در صفحه‌ی ثبت زمان، گزارش‌ها ساخته می‌شوند."
           action={
             <button className="btn-secondary mt-2" onClick={() => { const n = monthlyNeighbors(jy, jm, -1); setMonth(n.jy, n.jm); }}>
               ماه قبل

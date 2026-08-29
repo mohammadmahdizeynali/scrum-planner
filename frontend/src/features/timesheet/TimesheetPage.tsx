@@ -365,7 +365,7 @@ export default function TimesheetPage() {
   return (
     <main className="w-full px-3 pb-10 pt-4 md:px-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        <h1 className="page-title">تایم‌شیت</h1>
+        <h1 className="page-title">ثبت زمان</h1>
         <div className="flex w-full items-center justify-center gap-1.5 sm:w-auto">
           <button className="btn-secondary !px-2.5" onClick={() => navWeek(-1)} title="هفته قبل">
             <ChevronRight size={17} />
@@ -396,7 +396,7 @@ export default function TimesheetPage() {
           {days.map((d, i) => (
             <div
               key={d.iso}
-              className={`px-2 py-2.5 text-center ${i === todayIndex ? "bg-indigo-50/80 dark:bg-indigo-500/10" : i === 6 ? "bg-slate-50 dark:bg-slate-800/30" : ""}`}
+              className={`px-2 py-2.5 text-center ${i === todayIndex ? "bg-indigo-50/80 dark:bg-indigo-500/10" : ""}`}
             >
               <div className={`text-[13px] font-bold ${i === todayIndex ? "text-indigo-600 dark:text-indigo-300" : "text-slate-600 dark:text-slate-300"}`}>
                 {WEEKDAYS_FA[i]}
@@ -442,11 +442,7 @@ export default function TimesheetPage() {
                   key={d.iso}
                   ref={(el) => (colRefs.current[i] = el)}
                   className={`relative border-e border-slate-100 last:border-e-0 dark:border-slate-800/70 ${
-                    i === todayIndex
-                      ? "bg-indigo-50/40 dark:bg-indigo-500/[0.07]"
-                      : i === 6
-                        ? "bg-slate-50/80 dark:bg-slate-800/20"
-                        : ""
+                    i === todayIndex ? "bg-indigo-50/40 dark:bg-indigo-500/[0.07]" : ""
                   }`}
                   style={{ touchAction: "none" }}
                   onPointerDown={(ev) => {

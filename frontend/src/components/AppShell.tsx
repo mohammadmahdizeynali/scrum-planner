@@ -19,7 +19,7 @@ import { cn } from "./ui";
 
 const NAV = [
   { to: "/", label: "اسپرینت", icon: CalendarCheck2 },
-  { to: "/timesheet", label: "تایم‌شیت", icon: CalendarDays },
+  { to: "/timesheet", label: "ثبت زمان", icon: CalendarDays },
   { to: "/reports", label: "گزارش‌ها", icon: BarChart3 },
   { to: "/tasks", label: "انبار", icon: ListTodo },
   { to: "/areas", label: "حوزه‌ها", icon: Boxes },

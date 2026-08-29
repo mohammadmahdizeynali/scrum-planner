@@ -16,7 +16,7 @@
 | Sprint | اسپرینت | Fixed one-week period, Saturday 00:00 → Friday 24:00 (user's timezone). One per week. |
 | Sprint membership | عضویت در اسپرینت | Record that a task belongs to a sprint. A task can be a member of multiple sprints over time (carry-over). |
 | Time entry | ثبت زمان | A logged duration: task + start + end + note + billable flag. The atom of all time reporting. |
-| Timesheet | تایم‌شیت | The dedicated weekly calendar page where entries are created/edited by dragging. |
+| Timesheet | صفحه‌ی ثبت زمان | The dedicated weekly calendar page where entries are created/edited by dragging (renamed from «تایم‌شیت» to «ثبت زمان» at the owner's request). |
 | Estimate | برآورد | Planned effort per task, in hours, decimal (e.g. 1.5). |
 | Logged | ثبت‌شده | Sum of time entries for the scope in question. |
 | Billable | قابل‌صدور فاکتور | Flag on a time entry; default on for billable areas (Freelance), off elsewhere. |
