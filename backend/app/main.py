@@ -11,6 +11,7 @@ from app.core.security import hash_password
 from app.db import Base, SessionLocal, engine
 from app.models import User
 from app.services.backup import backup_scheduler_loop
+from app.services.notifications import notifications_scheduler_loop
 
 
 def ensure_schema_upgrades() -> None:
@@ -50,10 +51,12 @@ async def lifespan(app: FastAPI):
     backfill_issue_keys()
     seed_admin()
     scheduler = asyncio.create_task(backup_scheduler_loop())
+    notifier = asyncio.create_task(notifications_scheduler_loop())
     try:
         yield
     finally:
         scheduler.cancel()
+        notifier.cancel()
 
 
 def backfill_issue_keys() -> None:

@@ -25,5 +25,12 @@ class Settings(BaseSettings):
     backup_github_repo: str = ""  # "owner/name" of a private repo
     backup_github_token: str = ""
 
+    # Daily Telegram briefings (morning sprint overview + evening logged-time summary).
+    # Empty notify_* values fall back to the backup bot credentials.
+    notify_telegram_bot_token: str = ""
+    notify_telegram_chat_id: str = ""
+    notify_morning_hour: int = 6   # local (admin timezone) hour of the morning briefing
+    notify_evening_hour: int = 23  # local hour of the evening summary
+
 
 settings = Settings()

@@ -125,6 +125,13 @@
 | D70 | «تایم‌شیت» renamed to **«ثبت زمان»** (menu + page title) — more meaningful than the loanword. | agreed (owner request) |
 | D71 | Friday's holiday tint removed from the timesheet week grid — holiday coloring isn't relevant in a personal planner. Today-only highlighting remains. | agreed (owner request) |
 
+## Daily Telegram digests (2026-08-29)
+
+| # | Decision | Status |
+| --- | --- | --- |
+| D72 | Morning briefing (06:00 local, tunable): current sprint tasks grouped by status with issue key + estimate/logged, and a مهلت‌ها section (overdue / today / tomorrow) covering deadline reminders for ALL non-closed tasks. Evening summary (23:00 local, tunable): per-task logged time for the day, billable split omitted, tasks closed today. | implemented |
+| D73 | Delivery reuses the backup Telegram credentials (dedicated notify_* envs may override); messages are HTML with escaping, chunked under Telegram's 4096-char limit; missed daily slots are skipped (no stale digests); admin-only preview endpoint `/api/v1/notify/preview` renders the exact text without sending. | implemented |
+
 ## Open questions for the owner (doc review)
 
 1. Any **proposal** rows above to veto? (esp. D13, D14, D28–D31, D34, D39, D40)

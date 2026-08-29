@@ -134,6 +134,22 @@ schema, loads the dump, and brings the whole stack up. Verified end-to-end (12 t
 
 ---
 
+## Daily Telegram digests
+
+The backend also runs a daily notification loop over the same Telegram bot:
+
+- **Morning briefing** (default **06:00** local): tasks currently in the sprint grouped by
+  status, with issue key, estimate vs logged per task, plus a **مهلت‌ها** section listing
+  overdue / due-today / due-tomorrow tasks (deadline reminders).
+- **Evening summary** (default **23:00** local): total time logged that day, per-task
+  breakdown, and tasks closed today.
+
+Hours are tunable via `NOTIFY_MORNING_HOUR` / `NOTIFY_EVENING_HOUR`; delivery reuses
+`BACKUP_TELEGRAM_BOT_TOKEN` / `BACKUP_TELEGRAM_CHAT_ID` (needs a server that can reach
+api.telegram.org). Missed slots (server was down) are skipped rather than sent stale. To check
+the exact message text without waiting: `GET /api/v1/notify/preview?type=morning|evening`
+(admin session).
+
 ## Architecture
 
 ```
