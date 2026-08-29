@@ -17,6 +17,7 @@ import {
 } from "../../lib/tz";
 
 const HOUR_PX = 60;
+const MOBILE_HOUR_PX = 26; // single-day mobile timeline: whole day ≈ 624px
 const SNAP = 15;
 const GRID_HEIGHT = 24 * HOUR_PX;
 
@@ -160,6 +161,12 @@ export default function TimesheetPage() {
   const nowParts = utcToZonedParts(new Date(), tz);
   const todayIndex = days.findIndex((d) => sameDay(d.parts, nowParts));
   const nowMin = nowParts.h * 60 + nowParts.min;
+
+  // selected day for the mobile single-day timeline
+  const [mobileDay, setMobileDay] = useState(0);
+  useEffect(() => {
+    if (todayIndex >= 0) setMobileDay(todayIndex);
+  }, [todayIndex]);
 
   // Open the grid around the user's working hours on first load.
   const didAutoScroll = useRef(false);
@@ -484,13 +491,13 @@ export default function TimesheetPage() {
       <MobileDayView
         days={days}
         todayIndex={todayIndex}
+        nowMin={nowMin}
         placed={placed}
+        lanesByDay={lanesByDay}
+        selDay={mobileDay}
+        setSelDay={setMobileDay}
         onOpenEntry={(e) => setModal({ mode: "edit", dayIndex: e.dayIndex, startMin: e.startMin, endMin: e.startMin + e.minutes, entry: e })}
-        onCreate={() => {
-          const idx = todayIndex >= 0 ? todayIndex : 0;
-          const rounded = Math.ceil(nowMin / 60) * 60;
-          setModal({ mode: "create", dayIndex: idx, startMin: Math.min(1380, rounded), endMin: Math.min(1440, rounded + 60) });
-        }}
+        onOpenCreate={(startMin, endMin) => setModal({ mode: "create", dayIndex: mobileDay, startMin, endMin })}
       />
 
       {modal && (
@@ -511,73 +518,183 @@ export default function TimesheetPage() {
   );
 }
 
-// ---------------- Mobile ----------------
+// ---------------- Mobile: two-row day selector + single-day drag timeline ----------------
 
 function MobileDayView({
   days,
   todayIndex,
+  nowMin,
   placed,
+  lanesByDay,
+  selDay,
+  setSelDay,
   onOpenEntry,
-  onCreate,
+  onOpenCreate,
 }: {
   days: DayInfo[];
   todayIndex: number;
+  nowMin: number;
   placed: PlacedEntry[];
+  lanesByDay: Record<number, { items: { entry: PlacedEntry; lane: number }[]; laneCount: number }>;
+  selDay: number;
+  setSelDay: (i: number) => void;
   onOpenEntry: (e: PlacedEntry) => void;
-  onCreate: () => void;
+  onOpenCreate: (startMin: number, endMin: number) => void;
 }) {
-  const [sel, setSel] = useState(todayIndex >= 0 ? todayIndex : 0);
-  useEffect(() => {
-    if (todayIndex >= 0) setSel(todayIndex);
-  }, [todayIndex]);
-  const dayEntries = placed.filter((e) => e.dayIndex === sel).sort((a, b) => a.startMin - b.startMin);
-  const total = dayEntries.reduce((s, e) => s + e.minutes, 0);
+  const colRef = useRef<HTMLDivElement | null>(null);
+  const [drag, setDrag] = useState<{ startMin: number; endMin: number } | null>(null);
+  const dragRef = useRef(drag);
+  dragRef.current = drag;
+
+  const minutesFromY = (clientY: number): number => {
+    const rect = colRef.current?.getBoundingClientRect();
+    if (!rect) return 0;
+    const m = ((clientY - rect.top) / MOBILE_HOUR_PX) * 60;
+    return Math.max(0, Math.min(1440, Math.round(m / SNAP) * SNAP));
+  };
+
+  const beginDrag = (ev: React.PointerEvent) => {
+    if (ev.target !== ev.currentTarget) return; // entry blocks handle themselves (tap = edit)
+    ev.preventDefault();
+    const anchor = minutesFromY(ev.clientY);
+    setDrag({ startMin: anchor, endMin: anchor + SNAP });
+    const onMove = (e: PointerEvent) => {
+      const m = minutesFromY(e.clientY);
+      setDrag({
+        startMin: Math.max(0, Math.min(anchor, m)),
+        endMin: Math.min(1440, Math.max(anchor + SNAP, m)),
+      });
+    };
+    const finish = () => {
+      window.removeEventListener("pointermove", onMove);
+      const cur = dragRef.current;
+      setDrag(null);
+      if (cur) onOpenCreate(Math.min(cur.startMin, 1425), Math.max(cur.startMin + SNAP, cur.endMin));
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", finish, { once: true });
+    window.addEventListener("pointercancel", finish, { once: true });
+  };
+
+  const dayItems = lanesByDay[selDay]?.items ?? [];
+  const laneCount = lanesByDay[selDay]?.laneCount ?? 1;
+  const dayTotal = placed.filter((e) => e.dayIndex === selDay).reduce((s, e) => s + e.minutes, 0);
+  const gridH = 24 * MOBILE_HOUR_PX;
+
+  const renderMobileBlock = (e: PlacedEntry, lane: number) => {
+    const top = (e.startMin / 60) * MOBILE_HOUR_PX;
+    const height = Math.max((e.minutes / 60) * MOBILE_HOUR_PX, 10);
+    const widthPct = 100 / Math.max(laneCount, 1);
+    const color = e.area_color ?? "#64748b";
+    return (
+      <div
+        key={e.id}
+        className={`absolute overflow-hidden rounded-lg border text-[10px] shadow-sm ${laneCount > 1 ? "border-amber-400" : "border-transparent"}`}
+        style={{
+          top,
+          height,
+          width: `calc(${widthPct}% - 6px)`,
+          insetInlineStart: `calc(${lane * widthPct}% + 3px)`,
+          backgroundColor: `${color}2e`,
+          borderInlineStart: `3px solid ${color}`,
+        }}
+        onPointerDown={(ev) => {
+          ev.stopPropagation();
+          onOpenEntry(e);
+        }}
+      >
+        {height >= 22 && (
+          <div className="truncate px-1.5 py-0.5 leading-[14px] text-slate-800 dark:text-slate-100">{e.task_title}</div>
+        )}
+        {height >= 36 && (
+          <div className="tnum px-1.5 leading-[13px] text-slate-500 dark:text-slate-300">
+            {clockOf(e.startMin)}–{clockOf(e.startMin + e.minutes)}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="md:hidden">
-      <div className="mb-3 flex gap-1 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+      {/* day selector: 4 + 3 in two rows */}
+      <div className="mb-3 grid grid-cols-4 gap-1">
         {days.map((d, i) => (
           <button
             key={d.iso}
-            onClick={() => setSel(i)}
-            className={`flex shrink-0 flex-col items-center rounded-xl px-3 py-1.5 text-[11px] font-semibold leading-4 transition ${
-              i === sel ? "bg-indigo-600 text-white" : "bg-white text-slate-600 shadow-sm dark:bg-slate-900 dark:text-slate-300"
-            } ${i === todayIndex ? "ring-1 ring-indigo-300 dark:ring-indigo-500/50" : ""}`}
+            onClick={() => setSelDay(i)}
+            className={`flex flex-col items-center rounded-xl py-1.5 leading-4 transition ${
+              i === selDay
+                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/25"
+                : "bg-white text-slate-600 shadow-sm dark:bg-slate-900 dark:text-slate-300"
+            } ${i === todayIndex && i !== selDay ? "ring-1 ring-indigo-300 dark:ring-indigo-500/50" : ""}`}
           >
-            <span>{WEEKDAYS_FA[i].charAt(0)}</span>
+            <span className="text-[11px] font-semibold">{WEEKDAYS_FA[i]}</span>
             <span className="tnum text-[10px] opacity-80">{toFa(days[i].parts.d)}</span>
           </button>
         ))}
       </div>
-      <div className="card p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <div className="text-sm font-bold">{faDate(days[sel].parts, { withWeekday: true })}</div>
-          <div className="tnum text-xs text-slate-500">{fmtDuration(total)}</div>
+
+      <div className="card p-3">
+        <div className="mb-2 flex items-center justify-between">
+          <div className="text-sm font-bold">{faDate(days[selDay].parts, { withWeekday: true })}</div>
+          <div className="tnum text-xs text-slate-500">{fmtDuration(dayTotal)}</div>
         </div>
-        <div className="space-y-2">
-          {dayEntries.map((e) => (
-            <button
-              key={e.id}
-              className="flex w-full items-center gap-2 rounded-xl border border-slate-200 p-3 text-start dark:border-slate-700"
-              onClick={() => onOpenEntry(e)}
-            >
-              <span className="h-8 w-1.5 rounded-full" style={{ backgroundColor: e.area_color ?? "#64748b" }} />
-              <span className="flex-1">
-                <span className="block text-sm font-semibold">{e.task_title}</span>
-                <span className="tnum block text-xs text-slate-500">
-                  {clockOf(e.startMin)}–{clockOf(e.startMin + e.minutes)}
-                  {e.note ? ` · ${e.note}` : ""}
+
+        {/* single-day timeline: drag to create, tap an entry to edit */}
+        <div className="overflow-hidden rounded-xl border border-slate-100 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className="relative grid" style={{ gridTemplateColumns: "44px 1fr", height: gridH }}>
+            <div className="relative border-e border-slate-200 dark:border-slate-700">
+              {Array.from({ length: 24 }, (_, h) => (
+                <span key={h} className="tnum absolute -translate-y-1/2 text-[10px] text-slate-400" style={{ top: h * MOBILE_HOUR_PX, insetInlineEnd: 6 }}>
+                  {pad2(h)}:00
                 </span>
-              </span>
-              <span className="tnum text-xs text-slate-400">{fmtDuration(e.minutes)}</span>
-            </button>
-          ))}
-          {dayEntries.length === 0 && <div className="py-8 text-center text-sm text-slate-400">این روز خالی است.</div>}
+              ))}
+            </div>
+            <div
+              ref={colRef}
+              className="relative touch-none select-none"
+              onPointerDown={beginDrag}
+            >
+              {Array.from({ length: 24 }, (_, h) => (
+                <div key={`h${h}`} className="pointer-events-none absolute inset-x-0 border-t border-slate-200/80 dark:border-slate-700/60" style={{ top: h * MOBILE_HOUR_PX }} />
+              ))}
+              {Array.from({ length: 24 }, (_, h) => (
+                <div key={`hh${h}`} className="pointer-events-none absolute inset-x-0 border-t border-dashed border-slate-100 dark:border-slate-800/50" style={{ top: h * MOBILE_HOUR_PX + MOBILE_HOUR_PX / 2 }} />
+              ))}
+              {selDay === todayIndex && (
+                <div className="pointer-events-none absolute inset-x-0 z-30" style={{ top: (nowMin / 60) * MOBILE_HOUR_PX }}>
+                  <div className="border-t-2 border-red-500/80" />
+                  <span className="tnum absolute -top-2.5 start-1 rounded-full bg-red-500 px-1.5 text-[9px] font-bold text-white">
+                    {clockOf(nowMin)}
+                  </span>
+                </div>
+              )}
+              {dayItems.map(({ entry, lane }) => renderMobileBlock(entry, lane))}
+              {drag && (
+                <div
+                  className="pointer-events-none absolute inset-x-1 z-30 rounded-lg border-2 border-dashed border-indigo-500 bg-indigo-500/15"
+                  style={{ top: (drag.startMin / 60) * MOBILE_HOUR_PX, height: Math.max(((drag.endMin - drag.startMin) / 60) * MOBILE_HOUR_PX, 8) }}
+                >
+                  <span className="tnum absolute -top-4 start-0 rounded bg-indigo-600 px-1.5 py-px text-[10px] text-white">
+                    {clockOf(drag.startMin)}–{clockOf(drag.endMin)}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="mt-2 text-center text-[11px] leading-4 text-slate-400">
+          برای ثبت زمان، روی تقویم بکشید · برای ویرایش، روی یک ثبت بزنید
         </div>
       </div>
+
       <button
         className="fixed bottom-20 end-4 z-40 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-xl md:hidden"
-        onClick={onCreate}
+        onClick={() => {
+          const rounded = Math.min(1380, Math.ceil(nowMin / 60) * 60);
+          onOpenCreate(rounded, Math.min(1440, rounded + 60));
+        }}
         aria-label="ثبت زمان"
       >
         <Plus size={24} />
