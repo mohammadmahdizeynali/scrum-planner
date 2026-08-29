@@ -248,6 +248,77 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
   );
 }
 
+/** Two side-by-side boxes `[ h ] [ min ]` for entering a duration — no "2:15" style anywhere. */
+export function DurationInput({
+  minutes,
+  onChangeMinutes,
+  disabled,
+}: {
+  minutes: number | null | undefined;
+  onChangeMinutes: (v: number | null) => void;
+  disabled?: boolean;
+}) {
+  const [hText, setHText] = useState(() => (minutes != null ? String(Math.floor(minutes / 60)) : ""));
+  const [mText, setMText] = useState(() => (minutes != null ? String(minutes % 60) : ""));
+  const lastEmitted = useRef<number | null | undefined>(undefined);
+
+  useEffect(() => {
+    // sync only when the value changed from outside (not from our own emissions)
+    if (minutes !== lastEmitted.current) {
+      lastEmitted.current = minutes ?? null;
+      setHText(minutes != null ? String(Math.floor(minutes / 60)) : "");
+      setMText(minutes != null ? String(minutes % 60) : "");
+    }
+  }, [minutes]);
+
+  const emit = (hS: string, mS: string) => {
+    if (hS === "" && mS === "") {
+      lastEmitted.current = null;
+      onChangeMinutes(null);
+      return;
+    }
+    const hv = parseInt(hS || "0", 10) || 0;
+    const mv = parseInt(mS || "0", 10) || 0;
+    const total = hv * 60 + Math.min(59, Math.max(0, mv));
+    lastEmitted.current = total;
+    onChangeMinutes(total > 0 ? total : null);
+  };
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <input
+        className="input tnum !w-14 !px-2 text-center"
+        inputMode="numeric"
+        aria-label="ساعت"
+        placeholder="0"
+        value={hText}
+        disabled={disabled}
+        onChange={(e) => {
+          const v = e.target.value.replace(/\D/g, "").slice(0, 3);
+          setHText(v);
+          emit(v, mText);
+        }}
+      />
+      <span className="text-xs text-slate-400">h</span>
+      <input
+        className="input tnum !w-16 !px-2 text-center"
+        inputMode="numeric"
+        aria-label="دقیقه"
+        placeholder="0"
+        value={mText}
+        disabled={disabled}
+        onChange={(e) => {
+          const raw = e.target.value.replace(/\D/g, "").slice(0, 2);
+          const v = raw === "" ? "" : String(Math.min(59, parseInt(raw, 10) || 0));
+          setMText(v);
+          emit(hText, v);
+        }}
+      />
+      <span className="text-xs text-slate-400">min</span>
+    </span>
+  );
+}
+
 export function ProgressBar({ value, max, className }: { value: number; max: number; className?: string }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (

@@ -84,39 +84,7 @@ export function fmtDuration(minutes: number): string {
   return `${h}h ${rest} min`;
 }
 
-/** Minutes → "2:15" (h:mm, Latin digits) — compact form for inputs. */
-export function hmOf(minutes: number | null | undefined): string {
-  if (minutes == null) return "";
-  const m = Math.max(0, Math.round(minutes));
-  return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
-}
-
-/**
- * Parse a duration typed by the user into minutes. Accepts:
- *   "2:15"  → 135 (h:mm)   "0:45" → 45
- *   "2.25"  → 135 (decimal hours, legacy input style)
- *   "2"     → 120 (plain hours)
- */
-export function parseDurationInput(text: string): number | null {
-  const s = text.trim().replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
-  if (!s) return null;
-  if (s.includes(":")) {
-    const [h, m] = s.split(":").map((x) => parseInt(x, 10) || 0);
-    if (h < 0 || m < 0 || m >= 60) return null;
-    const total = h * 60 + m;
-    return total > 0 ? total : null;
-  }
-  const n = parseFloat(s.replace(/[^\d.]/g, ""));
-  if (Number.isNaN(n) || n <= 0) return null;
-  return Math.round(n * 60);
-}
-
-/** "1.5" → 90 — legacy decimal-hours parse (kept for compatibility). */
-export function minutesFromDecimalHours(v: string): number | null {
-  const n = parseFloat(v.replace(/[^0-9.]/g, ""));
-  if (Number.isNaN(n) || n <= 0) return null;
-  return Math.round(n * 60);
-}
+/** Duration entry is handled by the DurationInput component ([ h ] [ min ] boxes). */
 
 /** Estimate/logged pair → "1h 15 min / 2h" (slash form; bare logged if no estimate). */
 export function fmtEstimateLogged(loggedMin: number, estimateMin: number | null): string {

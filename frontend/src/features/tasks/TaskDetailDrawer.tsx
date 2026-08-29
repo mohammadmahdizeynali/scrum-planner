@@ -13,12 +13,11 @@ import {
   faDate,
   fmtDuration,
   fmtEstimateLogged,
-  hmOf,
-  parseDurationInput,
   PRIORITY_FA,
   STATUS_FA,
   gregorianYMD,
 } from "../../lib/format";
+import { DurationInput } from "../../components/ui";
 import { utcToZonedParts } from "../../lib/tz";
 
 function useMeTz(): string {
@@ -246,14 +245,10 @@ export default function TaskDetailDrawer({ taskId, onClose }: { taskId: string; 
               ))}
             </select>
           </Field>
-          <Field label="برآورد (ساعت:دقیقه)">
-            <input
-              className="input tnum"
-              inputMode="numeric"
-              placeholder="2:15"
-              defaultValue={hmOf(task.estimate_minutes)}
-              onBlur={(e) => {
-                const v = parseDurationInput(e.target.value);
+          <Field label="برآورد" hint="خالی = بدون برآورد">
+            <DurationInput
+              minutes={task.estimate_minutes}
+              onChangeMinutes={(v) => {
                 if (v === null) {
                   if (task.estimate_minutes) patch.mutate({ clear_estimate: true });
                 } else if (v !== task.estimate_minutes) {

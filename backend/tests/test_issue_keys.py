@@ -1,3 +1,30 @@
+def test_retro_keying_on_prefix_set(auth_client):
+    a = auth_client.post("/api/v1/areas", json={"name": "X"}).json()
+    t1 = auth_client.post("/api/v1/tasks", json={"title": "one", "area_id": a["id"]}).json()
+    t2 = auth_client.post("/api/v1/tasks", json={"title": "two", "area_id": a["id"]}).json()
+    assert t1["issue_key"] is None and t2["issue_key"] is None
+
+    r = auth_client.patch(f"/api/v1/areas/{a['id']}", json={"key_prefix": "XXX"})
+    assert r.status_code == 200
+
+    g1 = auth_client.get(f"/api/v1/tasks/{t1['id']}").json()
+    g2 = auth_client.get(f"/api/v1/tasks/{t2['id']}").json()
+    assert g1["issue_key"] == "XXX-001"  # older task gets the lower number
+    assert g2["issue_key"] == "XXX-002"
+
+    t3 = auth_client.post("/api/v1/tasks", json={"title": "three", "area_id": a["id"]}).json()
+    assert t3["issue_key"] == "XXX-003"
+
+
+def test_retro_keying_covers_project_tasks(auth_client):
+    a = auth_client.post("/api/v1/areas", json={"name": "Y"}).json()
+    p = auth_client.post("/api/v1/projects", json={"area_id": a["id"], "name": "P"}).json()
+    t = auth_client.post("/api/v1/tasks", json={"title": "in project", "project_id": p["id"]}).json()
+    assert t["issue_key"] is None
+    auth_client.patch(f"/api/v1/areas/{a['id']}", json={"key_prefix": "PRJ"})
+    assert auth_client.get(f"/api/v1/tasks/{t['id']}").json()["issue_key"] == "PRJ-001"
+
+
 def test_sequential_keys_per_area(auth_client):
     r = auth_client.post("/api/v1/areas", json={"name": "University", "key_prefix": "SBU"})
     assert r.status_code == 200, r.text

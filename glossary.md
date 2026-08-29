@@ -46,10 +46,9 @@ auto-transition to `Open` is a convenience nudge, matching the owner's described
 
 - **Dates:** Jalali, Persian digits. `جمعه ۶ شهریور ۱۴۰۵` — today (2026-08-28) for reference.
 - **Clock times:** Latin digits, `02:30–04:00`, tabular alignment.
-- **Durations (owner-decided 2026-08-29, final):** compact Latin format —
-  `1h 15 min`, `2h`, `45 min` via `fmtDuration`. **Never decimal hours** (`2.25` banned) and
-  never mixed Persian-unit spellings. Compact estimate inputs use `2:15` (h:mm) and also
-  accept legacy decimal input.
+- **Durations (owner-decided 2026-08-29, final):** display via `fmtDuration` — compact Latin
+  `1h 15 min`, `2h`, `45 min`. **Never decimal hours.** Entry via `DurationInput`: two
+  side-by-side boxes `[ h ] [ min ]` — the `2:15`/decimal text-input styles are banned.
 - **Week:** Saturday → Friday. Saturday is the first day, shown at the **right** edge in RTL.
 - **Date ranges:** collapse shared month/year — `هفته‌ی ۷ تا ۱۳ شهریور ۱۴۰۵`,
   `۳۱ مرداد تا ۶ شهریور ۱۴۰۵` (see `faDateRange`).

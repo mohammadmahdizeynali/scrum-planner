@@ -47,12 +47,30 @@ def ensure_schema_upgrades() -> None:
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     ensure_schema_upgrades()
+    backfill_issue_keys()
     seed_admin()
     scheduler = asyncio.create_task(backup_scheduler_loop())
     try:
         yield
     finally:
         scheduler.cancel()
+
+
+def backfill_issue_keys() -> None:
+    """One-time-per-boot safety net: every prefixed area's key-less tasks get keys."""
+    from sqlalchemy import select
+
+    from app.models import Area
+    from app.services.issue_keys import assign_missing_keys
+
+    db = SessionLocal()
+    try:
+        areas = db.scalars(select(Area).where(Area.key_prefix.isnot(None))).all()
+        for area in areas:
+            assign_missing_keys(db, area)
+        db.commit()
+    finally:
+        db.close()
 
 
 def seed_admin() -> None:

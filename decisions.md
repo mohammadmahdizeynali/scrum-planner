@@ -120,6 +120,8 @@
 | D65 | Search matches issue keys: exact (`SBU-002`), sloppy (`sbu-2`, `sbu 2` → padded exact), and bare prefix (`SBU` → all) — in global search and All Tasks filter. | implemented |
 | D66 | Schema evolution: Alembic still deferred; a small idempotent startup migration (`ensure_schema_upgrades`) ALTERs live tables and creates the unique indexes (areas.key_prefix, tasks.issue_key). | implemented |
 | D67 | Closed sprints are read-only: adding/removing members is rejected server-side (409); the Sprint page shows a بسته‌شده badge, hides add/drag/remove, and swaps the close button for «بازگشایی اسپرینت» (reopen). Task-level edits (title/status via drawer, time logging) remain allowed — only sprint membership is frozen. | agreed (owner request) |
+| D68 | Estimate entry everywhere uses the shared DurationInput — two side-by-side boxes `[ h ] [ min ]` (Latin unit labels, minutes clamped 0–59). The `2:15`/decimal text-input styles are removed from the codebase entirely. | agreed (owner request) |
+| D69 | Issue-key retro-keying: setting (or changing, when allowed) an area prefix assigns keys to ALL its existing tasks (area-level + via projects) in creation order; counter continues from there. A startup backfill covers prefixed areas for already-deployed data. | implemented (completes the sprint-keys request) |
 
 ## Open questions for the owner (doc review)
 

@@ -14,8 +14,8 @@ import {
 import { CalendarClock, CheckCircle2, Hourglass, ListPlus, PlayCircle, X } from "lucide-react";
 import { api } from "../../api/client";
 import type { SprintDetail, Task } from "../../api/types";
-import { Modal, PageSpinner, PriorityBadge, AreaChip, ProgressBar, Spinner, Toggle, useToast, EmptyState, ConfirmDialog, cn } from "../../components/ui";
-import { fmtDuration, fmtEstimateLogged, hmOf, parseDurationInput, STATUS_FA } from "../../lib/format";
+import { Modal, PageSpinner, PriorityBadge, AreaChip, ProgressBar, Spinner, Toggle, useToast, EmptyState, ConfirmDialog, cn, DurationInput } from "../../components/ui";
+import { fmtDuration, fmtEstimateLogged, STATUS_FA } from "../../lib/format";
 import TaskDetailDrawer from "../tasks/TaskDetailDrawer";
 
 const COLUMNS: { status: Task["status"]; label: string; icon: JSX.Element }[] = [
@@ -130,7 +130,7 @@ function AddTasksModal({ open, onClose, sprint }: { open: boolean; onClose: () =
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<Task[]>([]);
   const [step, setStep] = useState<"select" | "estimate">("select");
-  const [estimates, setEstimates] = useState<Record<string, string>>({});
+  const [estimates, setEstimates] = useState<Record<string, number | null>>({});
 
   const { data, isFetching } = useQuery({
     queryKey: ["task-picker", q],
@@ -148,7 +148,7 @@ function AddTasksModal({ open, onClose, sprint }: { open: boolean; onClose: () =
         body: {
           items: selected.map((t) => ({
             task_id: t.id,
-            estimate_minutes: estimates[t.id] ? parseDurationInput(estimates[t.id]) : undefined,
+            estimate_minutes: estimates[t.id] ?? undefined,
           })),
         },
       }),
@@ -205,7 +205,14 @@ function AddTasksModal({ open, onClose, sprint }: { open: boolean; onClose: () =
             )}
           </div>
           <div className="flex justify-start gap-2">
-            <button className="btn-primary" disabled={selected.length === 0} onClick={() => setStep("estimate")}>
+            <button
+              className="btn-primary"
+              disabled={selected.length === 0}
+              onClick={() => {
+                setEstimates(Object.fromEntries(selected.map((t) => [t.id, t.estimate_minutes])));
+                setStep("estimate");
+              }}
+            >
               ادامه ({selected.length})
             </button>
             <button className="btn-secondary" onClick={close}>
@@ -219,14 +226,10 @@ function AddTasksModal({ open, onClose, sprint }: { open: boolean; onClose: () =
             {selected.map((t) => (
               <div key={t.id} className="flex items-center gap-3 rounded-xl border border-slate-200 p-2.5 dark:border-slate-700">
                 <span className="flex-1 truncate text-sm font-medium">{t.title}</span>
-                <input
-                  className="input tnum !w-24 text-center"
-                  placeholder="2:15"
-                  value={estimates[t.id] ?? hmOf(t.estimate_minutes)}
-                  onChange={(e) => setEstimates((prev) => ({ ...prev, [t.id]: e.target.value }))}
-                  inputMode="numeric"
+                <DurationInput
+                  minutes={estimates[t.id] ?? null}
+                  onChangeMinutes={(v) => setEstimates((prev) => ({ ...prev, [t.id]: v }))}
                 />
-                <span className="text-xs text-slate-400">ساعت:دقیقه</span>
               </div>
             ))}
           </div>

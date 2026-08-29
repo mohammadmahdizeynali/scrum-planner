@@ -15,7 +15,8 @@ import {
   StatusBadge,
   useToast,
 } from "../../components/ui";
-import { faDate, fmtDuration, parseDurationInput, PRIORITY_FA, STATUS_FA } from "../../lib/format";
+import { faDate, fmtDuration, PRIORITY_FA, STATUS_FA } from "../../lib/format";
+import { DurationInput } from "../../components/ui";
 import TaskDetailDrawer from "./TaskDetailDrawer";
 
 export default function AllTasksPage() {
@@ -285,7 +286,13 @@ function CreateTaskModal({
 }) {
   const qc = useQueryClient();
   const toast = useToast();
-  const [form, setForm] = useState({ title: "", scope: "", estimate: "", priority: "medium", description: "" });
+  const [form, setForm] = useState({
+    title: "",
+    scope: "",
+    estimate: null as number | null,
+    priority: "medium",
+    description: "",
+  });
 
   const submit = useMutation({
     mutationFn: () => {
@@ -294,8 +301,7 @@ function CreateTaskModal({
         priority: form.priority,
         description: form.description,
       };
-      const est = parseDurationInput(form.estimate);
-      if (est) body.estimate_minutes = est;
+      if (form.estimate) body.estimate_minutes = form.estimate;
       if (form.scope.startsWith("p:")) body.project_id = form.scope.slice(2);
       else if (form.scope) body.area_id = form.scope;
       return api("/v1/tasks", { method: "POST", body });
@@ -303,7 +309,7 @@ function CreateTaskModal({
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       toast.push("تسک ساخته شد.");
-      setForm({ title: "", scope: "", estimate: "", priority: "medium", description: "" });
+      setForm({ title: "", scope: "", estimate: null, priority: "medium", description: "" });
       onClose();
     },
     onError: (e) => toast.push((e as Error).message, "error"),
@@ -331,8 +337,8 @@ function CreateTaskModal({
           </select>
         </Field>
         <div className="grid grid-cols-2 gap-2">
-          <Field label="برآورد (ساعت:دقیقه)">
-            <input className="input tnum" inputMode="numeric" placeholder="مثلا 2:15" value={form.estimate} onChange={(e) => setForm({ ...form, estimate: e.target.value })} />
+          <Field label="برآورد">
+            <DurationInput minutes={form.estimate} onChangeMinutes={(v) => setForm({ ...form, estimate: v })} />
           </Field>
           <Field label="اولویت">
             <select className="input" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>

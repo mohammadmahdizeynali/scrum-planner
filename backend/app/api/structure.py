@@ -9,6 +9,7 @@ from app.db import get_db
 from app.deps import get_current_user
 from app.models import Area, Project, Task, TimeEntry, User
 from app.schemas import AreaIn, AreaOut, AreaUpdateIn, DeletePreviewOut, ProjectIn, ProjectOut, ProjectUpdateIn
+from app.services.issue_keys import assign_missing_keys
 
 router = APIRouter(tags=["structure"])
 
@@ -125,6 +126,8 @@ def update_area(area_id: uuid.UUID, body: AreaUpdateIn, user: User = Depends(get
             data.pop("key_prefix")
     for field, value in data.items():
         setattr(area, field, value)
+    if area.key_prefix:
+        assign_missing_keys(db, area)
     db.commit()
     db.refresh(area)
     return _build_area_out(db, area, user)
