@@ -1,0 +1,60 @@
+name: planner
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-planner}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-planner}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-planner} -d ${POSTGRES_DB:-planner}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      PLANNER_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-planner}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-planner}
+      PLANNER_ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      PLANNER_ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      PLANNER_COOKIE_SECURE: ${PLANNER_COOKIE_SECURE:-true}
+      PLANNER_BACKUP_DIR: /app/backups
+      PLANNER_BACKUP_TELEGRAM_BOT_TOKEN: ${BACKUP_TELEGRAM_BOT_TOKEN:-}
+      PLANNER_BACKUP_TELEGRAM_CHAT_ID: ${BACKUP_TELEGRAM_CHAT_ID:-}
+      PLANNER_BACKUP_GITHUB_REPO: ${BACKUP_GITHUB_REPO:-}
+      PLANNER_BACKUP_GITHUB_TOKEN: ${BACKUP_GITHUB_TOKEN:-}
+    volumes:
+      - ./backups:/app/backups
+      - ./.env:/app/.env:ro
+      - ./compose.yml:/app/compose.yml:ro
+      - ./docker:/app/docker:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  caddy:
+    build:
+      context: .
+      dockerfile: docker/caddy.Dockerfile
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

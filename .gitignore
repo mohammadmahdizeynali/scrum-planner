@@ -1,0 +1,15 @@
+# secrets & data — never enter git
+.env
+backups/
+
+# runtime / build artifacts
+backend/.venv/
+**/__pycache__/
+*.pyc
+frontend/node_modules/
+frontend/dist/
+e2e/node_modules/
+e2e/shots/
+
+# agent workspace config
+.zcode/
