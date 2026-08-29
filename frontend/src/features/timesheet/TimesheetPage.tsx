@@ -357,17 +357,19 @@ export default function TimesheetPage() {
 
   return (
     <main className="w-full px-3 pb-10 pt-4 md:px-6">
-      <div className="mx-auto mb-4 flex max-w-[1700px] flex-wrap items-center justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <h1 className="page-title">تایم‌شیت</h1>
-        <div className="flex items-center gap-1.5">
+        <div className="flex w-full items-center justify-center gap-1.5 sm:w-auto">
           <button className="btn-secondary !px-2.5" onClick={() => navWeek(-1)} title="هفته قبل">
             <ChevronRight size={17} />
           </button>
-          <span className="min-w-[240px] whitespace-nowrap text-center text-base font-extrabold">{weekLabel}</span>
+          <span className="min-w-0 flex-1 truncate text-center text-[13px] font-extrabold leading-5 sm:min-w-[240px] sm:text-base sm:leading-8">
+            {weekLabel}
+          </span>
           <button className="btn-secondary !px-2.5" onClick={() => navWeek(1)} title="هفته بعد">
             <ChevronLeft size={17} />
           </button>
-          <button className="btn-secondary" onClick={goToday}>
+          <button className="btn-secondary ms-1 !px-3" onClick={goToday}>
             امروز
           </button>
         </div>
@@ -533,17 +535,17 @@ function MobileDayView({
 
   return (
     <div className="md:hidden">
-      <div className="mb-3 flex gap-1 overflow-x-auto pb-1">
+      <div className="mb-3 flex gap-1 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
         {days.map((d, i) => (
           <button
             key={d.iso}
             onClick={() => setSel(i)}
-            className={`shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
+            className={`flex shrink-0 flex-col items-center rounded-xl px-3 py-1.5 text-[11px] font-semibold leading-4 transition ${
               i === sel ? "bg-indigo-600 text-white" : "bg-white text-slate-600 shadow-sm dark:bg-slate-900 dark:text-slate-300"
-            }`}
+            } ${i === todayIndex ? "ring-1 ring-indigo-300 dark:ring-indigo-500/50" : ""}`}
           >
-            {WEEKDAYS_FA[i].slice(0, 3)}
-            <span className="ms-1 opacity-70">{toFa(days[i].parts.d)}</span>
+            <span>{WEEKDAYS_FA[i].charAt(0)}</span>
+            <span className="tnum text-[10px] opacity-80">{toFa(days[i].parts.d)}</span>
           </button>
         ))}
       </div>
@@ -677,14 +679,16 @@ function EntryModal({
   return (
     <Modal open onClose={onClose} title={initial.mode === "create" ? "ثبت زمان" : "ویرایش زمان"}>
       <div className="space-y-3">
-        <div className="flex items-center gap-2 rounded-xl bg-slate-100 p-2.5 text-sm dark:bg-slate-800">
-          <CalendarDays size={16} className="text-slate-400" />
-          <span className="font-semibold">{faDate(days[initial.dayIndex].parts, { withWeekday: true })}</span>
-          <span className="ms-auto flex items-center gap-1.5">
+        <div className="rounded-xl bg-slate-100 p-2.5 dark:bg-slate-800">
+          <div className="mb-2 flex items-center gap-2 text-sm">
+            <CalendarDays size={16} className="shrink-0 text-slate-400" />
+            <span className="font-semibold">{faDate(days[initial.dayIndex].parts, { withWeekday: true })}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
             <input
               type="time"
               step={900}
-              className="input tnum !w-24 !py-1.5"
+              className="input tnum min-w-0 flex-1 !px-2"
               value={clockOf(startMin)}
               onChange={(e) => {
                 const m = minutesOfClock(e.target.value);
@@ -692,16 +696,18 @@ function EntryModal({
                 if (endMin <= m) setEndMin(Math.min(1440, m + SNAP));
               }}
             />
-            <span className="text-slate-400">تا</span>
+            <span className="shrink-0 text-xs text-slate-400">تا</span>
             <input
               type="time"
               step={900}
-              className="input tnum !w-24 !py-1.5"
+              className="input tnum min-w-0 flex-1 !px-2"
               value={clockOf(endMin % 1440 || 1440)}
               onChange={(e) => setEndMin(Math.max(startMin + SNAP, minutesOfClock(e.target.value)))}
             />
-            <span className="tnum w-16 text-end text-xs text-slate-500">{fmtDuration(duration)}</span>
-          </span>
+            <span className="tnum w-20 shrink-0 text-end text-xs font-bold text-slate-500 dark:text-slate-300">
+              {fmtDuration(duration)}
+            </span>
+          </div>
         </div>
 
         <div>
