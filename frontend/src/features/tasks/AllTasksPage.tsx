@@ -114,7 +114,7 @@ export default function AllTasksPage() {
       >
         <div className="relative min-w-[180px] flex-1">
           <Search size={15} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input className="input !ps-9" placeholder="جستجو در عنوان، توضیحات و یادداشت‌ها…" value={filters.q} onChange={(e) => setFilter("q", e.target.value)} />
+          <input className="input !ps-9" placeholder="جستجو در عنوان و کلید تسک…" value={filters.q} onChange={(e) => setFilter("q", e.target.value)} />
         </div>
         <select className="input !w-auto" value={filters.area_id} onChange={(e) => setFilter("area_id", e.target.value)}>
           <option value="">همه حوزه‌ها</option>
@@ -197,7 +197,10 @@ export default function AllTasksPage() {
               onClick={() => setDetailTaskId(t.id)}
             >
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold">{t.title}</div>
+                <div className="flex items-center gap-1.5">
+                  {t.issue_key && <span className="chip tnum shrink-0 bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">{t.issue_key}</span>}
+                  <span className="truncate text-sm font-semibold">{t.title}</span>
+                </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   <AreaChip name={t.project_name ?? t.area_name} color={t.area_color} />
                   {t.tags.map((tag) => (

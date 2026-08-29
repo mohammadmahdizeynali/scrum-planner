@@ -21,16 +21,24 @@ function AreaFormModal({
   const [name, setName] = useState(area?.name ?? "");
   const [color, setColor] = useState(area?.color ?? PALETTE[0]);
   const [billable, setBillable] = useState(area?.billable_default ?? false);
+  const [keyPrefix, setKeyPrefix] = useState(area?.key_prefix ?? "");
+  const prefixLocked = !!area && !!area.key_prefix && area.task_count > 0;
 
   const save = useMutation({
     mutationFn: () => {
-      const body = { name: name.trim(), color, billable_default: billable };
+      const body = {
+        name: name.trim(),
+        color,
+        billable_default: billable,
+        key_prefix: keyPrefix.trim() ? keyPrefix.trim().toUpperCase() : null,
+      };
       return area
         ? api(`/v1/areas/${area.id}`, { method: "PATCH", body })
         : api("/v1/areas", { method: "POST", body });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["areas"] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
       toast.push(area ? "حوزه ویرایش شد." : "حوزه ساخته شد.");
       onClose();
     },
@@ -42,6 +50,19 @@ function AreaFormModal({
       <div className="space-y-3">
         <Field label="نام حوزه">
           <input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="مثلا: دانشگاه" />
+        </Field>
+        <Field
+          label="کلید تسک‌ها (پیشوند)"
+          hint={prefixLocked ? "این حوزه تسک کلیددار دارد؛ برای حفظ هویت کلیدها (مثل SBU-001) قابل تغییر نیست." : "حروف لاتین، مثلا SBU → کلید تسک‌ها: SBU-001، SBU-002 …"}
+        >
+          <input
+            className="input tnum"
+            value={keyPrefix}
+            onChange={(e) => setKeyPrefix(e.target.value.toUpperCase())}
+            placeholder="SBU"
+            disabled={prefixLocked}
+            maxLength={10}
+          />
         </Field>
         <Field label="رنگ">
           <div className="flex flex-wrap gap-2">
@@ -242,7 +263,10 @@ export default function AreasPage() {
                   <div className="flex items-center gap-2.5">
                     <span className="h-4 w-4 rounded-full" style={{ backgroundColor: a.color }} />
                     <div>
-                      <div className="font-extrabold">{a.name}</div>
+                      <div className="flex items-center gap-1.5 font-extrabold">
+                        {a.name}
+                        {a.key_prefix && <span className="chip tnum bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">{a.key_prefix}</span>}
+                      </div>
                       <div className="text-xs text-slate-400">
                         {a.billable_default ? "پیش‌فرض قابل‌فاکتور · " : ""}
                         {a.task_count} تسک

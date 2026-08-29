@@ -87,6 +87,8 @@ class Area(Base):
     name: Mapped[str] = mapped_column(String(128))
     color: Mapped[str] = mapped_column(String(9), default="#6366f1")
     billable_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    key_prefix: Mapped[str | None] = mapped_column(String(16), unique=True)  # e.g. "SBU" → tasks SBU-001
+    task_counter: Mapped[int] = mapped_column(Integer, default=0)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -137,6 +139,7 @@ class Task(Base):
     status: Mapped[str] = mapped_column(String(16), default=TaskStatus.backlog.value, index=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     due_date: Mapped[date | None] = mapped_column(Date)
+    issue_key: Mapped[str | None] = mapped_column(String(24), unique=True)  # e.g. "SBU-001" (immutable)
     recurrence_rule: Mapped[dict | None] = mapped_column(JSON)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

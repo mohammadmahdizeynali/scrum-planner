@@ -1,3 +1,4 @@
+import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -11,8 +12,8 @@ from app.schemas import AreaIn, AreaOut, AreaUpdateIn, DeletePreviewOut, Project
 
 router = APIRouter(tags=["structure"])
 
+_KEY_PREFIX_RE = re.compile(r"^[A-Z][A-Z0-9]{1,9}$")
 
-# ---------------- Areas ----------------
 
 def _area_counts(db: Session, user: User):
     project_counts = dict(
@@ -37,6 +38,32 @@ def _area_counts(db: Session, user: User):
     return project_counts, area_task_counts, project_task_counts
 
 
+def _normalize_prefix(value: str | None) -> str | None:
+    if value is None:
+        return None
+    kp = value.strip().upper()
+    if not _KEY_PREFIX_RE.match(kp):
+        raise HTTPException(
+            status_code=422,
+            detail="کلید حوزه باید ۲ تا ۱۰ نویسه لاتین باشد و با حرف شروع شود (مثلا SBU).",
+        )
+    return kp
+
+
+def _build_area_out(db: Session, area: Area, user: User) -> AreaOut:
+    project_counts, area_tasks, project_tasks = _area_counts(db, user)
+    return AreaOut(
+        id=area.id,
+        name=area.name,
+        color=area.color,
+        billable_default=area.billable_default,
+        key_prefix=area.key_prefix,
+        sort_order=area.sort_order,
+        project_count=project_counts.get(area.id, 0),
+        task_count=area_tasks.get(area.id, 0) + project_tasks.get(area.id, 0),
+    )
+
+
 @router.get("/areas", response_model=list[AreaOut])
 def list_areas(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     project_counts, area_tasks, project_tasks = _area_counts(db, user)
@@ -47,6 +74,7 @@ def list_areas(user: User = Depends(get_current_user), db: Session = Depends(get
             name=a.name,
             color=a.color,
             billable_default=a.billable_default,
+            key_prefix=a.key_prefix,
             sort_order=a.sort_order,
             project_count=project_counts.get(a.id, 0),
             task_count=area_tasks.get(a.id, 0) + project_tasks.get(a.id, 0),
@@ -57,12 +85,15 @@ def list_areas(user: User = Depends(get_current_user), db: Session = Depends(get
 
 @router.post("/areas", response_model=AreaOut)
 def create_area(body: AreaIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    area = Area(user_id=user.id, **body.model_dump())
+    data = body.model_dump()
+    kp = _normalize_prefix(data.pop("key_prefix", None))
+    if kp is not None and db.scalar(select(Area).where(Area.key_prefix == kp)) is not None:
+        raise HTTPException(status_code=409, detail="این پیشوند قبلاً برای حوزه دیگری استفاده شده است.")
+    area = Area(user_id=user.id, key_prefix=kp, **data)
     db.add(area)
     db.commit()
     db.refresh(area)
-    return AreaOut(id=area.id, name=area.name, color=area.color, billable_default=area.billable_default,
-                   sort_order=area.sort_order, project_count=0, task_count=0)
+    return _build_area_out(db, area, user)
 
 
 def _get_area(db, user, area_id) -> Area:
@@ -75,13 +106,28 @@ def _get_area(db, user, area_id) -> Area:
 @router.patch("/areas/{area_id}", response_model=AreaOut)
 def update_area(area_id: uuid.UUID, body: AreaUpdateIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     area = _get_area(db, user, area_id)
-    for field, value in body.model_dump(exclude_unset=True).items():
+    data = body.model_dump(exclude_unset=True)
+    if "key_prefix" in data:
+        kp = _normalize_prefix(data["key_prefix"])
+        if kp != area.key_prefix:
+            keyed = db.query(func.count(Task.id)).filter(Task.issue_key.ilike(f"{area.key_prefix or ''}-%")).scalar()
+            if area.key_prefix and int(keyed or 0) > 0:
+                raise HTTPException(
+                    status_code=409,
+                    detail="این حوزه تسک با کلید دارد؛ پیشوند برای حفظ هویت کلیدها قابل تغییر نیست.",
+                )
+            if kp is not None and db.scalar(select(Area).where(Area.key_prefix == kp, Area.id != area.id)) is not None:
+                raise HTTPException(status_code=409, detail="این پیشوند قبلاً برای حوزه دیگری استفاده شده است.")
+            data["key_prefix"] = kp
+            if kp is None:
+                area.task_counter = 0
+        else:
+            data.pop("key_prefix")
+    for field, value in data.items():
         setattr(area, field, value)
     db.commit()
-    project_counts, area_tasks, project_tasks = _area_counts(db, user)
-    return AreaOut(id=area.id, name=area.name, color=area.color, billable_default=area.billable_default,
-                   sort_order=area.sort_order, project_count=project_counts.get(area.id, 0),
-                   task_count=area_tasks.get(area.id, 0) + project_tasks.get(area.id, 0))
+    db.refresh(area)
+    return _build_area_out(db, area, user)
 
 
 def _area_delete_preview(db, user, area: Area) -> DeletePreviewOut:

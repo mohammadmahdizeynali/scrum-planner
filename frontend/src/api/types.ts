@@ -24,6 +24,7 @@ export interface Area {
   name: string;
   color: string;
   billable_default: boolean;
+  key_prefix: string | null;
   sort_order: number;
   project_count: number;
   task_count: number;
@@ -53,6 +54,7 @@ export interface Task {
   estimate_minutes: number | null;
   logged_minutes: number;
   due_date: string | null;
+  issue_key: string | null;
   area_id: string | null;
   project_id: string | null;
   area_name: string | null;

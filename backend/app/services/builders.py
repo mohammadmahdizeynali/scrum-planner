@@ -90,6 +90,7 @@ def build_task_outs(db: Session, rows) -> list[dict]:
                 "estimate_minutes": task.estimate_minutes,
                 "logged_minutes": int(logged or 0),
                 "due_date": task.due_date,
+                "issue_key": task.issue_key,
                 "area_id": task.area_id,
                 "project_id": task.project_id,
                 "area_name": area_name,
@@ -111,8 +112,9 @@ def build_task_detail(db: Session, task: Task) -> dict:
         item = {
             "id": task.id, "title": task.title, "status": task.status, "priority": task.priority,
             "estimate_minutes": task.estimate_minutes, "logged_minutes": 0, "due_date": task.due_date,
+            "issue_key": task.issue_key,
             "area_id": task.area_id, "project_id": task.project_id, "area_name": None,
-            "area_color": None, "project_name": None, "active_sprint_id": None,
+            "area_color": None, "area_billable_default": None, "project_name": None, "active_sprint_id": None,
             "sort_order": task.sort_order, "updated_at": task.updated_at,
         }
     else:

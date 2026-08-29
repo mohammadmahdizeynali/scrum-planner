@@ -265,6 +265,7 @@ export default function TaskDetailDrawer({ taskId, onClose }: { taskId: string; 
         </div>
 
         <div className="mb-4 flex flex-wrap items-center gap-2">
+          {task.issue_key && <span className="chip tnum bg-indigo-50 font-bold text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300">{task.issue_key}</span>}
           <span className="chip bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300 tnum">
             {fmtEstimateLogged(task.logged_minutes, task.estimate_minutes)}
           </span>

@@ -1,3 +1,4 @@
+import re
 import uuid
 from datetime import datetime, timezone
 
@@ -89,7 +90,12 @@ def list_tasks(
         conds.append(Task.id.in_(select(TaskTag.task_id).where(TaskTag.tag_id == tag_id)))
     if q:
         like = f"%{q.strip()}%"
-        conds.append(or_(Task.title.ilike(like), Task.description.ilike(like), Task.notes.ilike(like)))
+        text_conds = [or_(Task.title.ilike(like), Task.description.ilike(like), Task.notes.ilike(like), Task.issue_key.ilike(like))]
+        # "sbu-2" / "SBU 2" → exact padded key "SBU-002"
+        key_m = re.match(r"^([a-zA-Z]{2,10})[-/ _]?(\d{1,6})$", q.strip())
+        if key_m:
+            text_conds.append(Task.issue_key == f"{key_m.group(1).upper()}-{int(key_m.group(2)):03d}")
+        conds.append(or_(*text_conds))
     if sprint_id is not None:
         conds.append(Task.id.in_(select(SprintMembership.task_id).where(SprintMembership.sprint_id == sprint_id)))
 
@@ -109,6 +115,15 @@ def list_tasks(
 @router.post("/tasks", response_model=TaskOut)
 def create_task(body: TaskCreateIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     area_id, project_id = _validate_parents(db, user, body.area_id, body.project_id)
+    area = None
+    if project_id is not None:
+        area = db.get(Area, db.get(Project, project_id).area_id)
+    elif area_id is not None:
+        area = db.get(Area, area_id)
+    issue_key = None
+    if area is not None and area.key_prefix:
+        area.task_counter = (area.task_counter or 0) + 1
+        issue_key = f"{area.key_prefix}-{area.task_counter:03d}"
     task = Task(
         user_id=user.id,
         title=body.title.strip(),
@@ -121,6 +136,7 @@ def create_task(body: TaskCreateIn, user: User = Depends(get_current_user), db: 
         project_id=project_id,
         due_date=body.due_date,
         recurrence_rule=body.recurrence_rule,
+        issue_key=issue_key,
     )
     db.add(task)
     db.flush()

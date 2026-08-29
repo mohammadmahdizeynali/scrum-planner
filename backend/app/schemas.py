@@ -42,6 +42,7 @@ class AreaIn(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     color: str = "#6366f1"
     billable_default: bool = False
+    key_prefix: str | None = None  # Latin, e.g. "SBU" → tasks SBU-001
     sort_order: int = 0
 
 
@@ -49,6 +50,7 @@ class AreaUpdateIn(BaseModel):
     name: str | None = None
     color: str | None = None
     billable_default: bool | None = None
+    key_prefix: str | None = None
     sort_order: int | None = None
 
 
@@ -57,6 +59,7 @@ class AreaOut(ORMModel):
     name: str
     color: str
     billable_default: bool
+    key_prefix: str | None = None
     sort_order: int
     project_count: int = 0
     task_count: int = 0
@@ -176,6 +179,7 @@ class TaskOut(ORMModel):
     estimate_minutes: int | None
     logged_minutes: int = 0
     due_date: date | None
+    issue_key: str | None = None
     area_id: uuid.UUID | None
     project_id: uuid.UUID | None
     area_name: str | None = None

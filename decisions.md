@@ -111,6 +111,15 @@
 | D61 | Nightly local pg_dump sidecar REMOVED — weekly ZIP is the only automatic backup; ZIPs also kept on server (last 10) in ./backups | agreed (owner chose "weekly ZIP only") |
 | D62 | pg_dump client pinned to server major (16) via PGDG repo — client 18 emits `SET transaction_timeout` which PG16 rejects on restore | implementation lesson |
 
+## Issue keys (2026-08-29)
+
+| # | Decision | Status |
+| --- | --- | --- |
+| D63 | Every Area carries a Latin prefix (`key_prefix`, e.g. `SBU`); tasks under it (direct or via project) get `SBU-001`, `SBU-002` … (3-digit zero-pad, grows past 999). Standalone tasks have no key. Keys are immutable — moving a task to another area keeps its key. | implemented (owner request) |
+| D64 | Prefix is locked once the area has keyed tasks (409 on change) to preserve key identity; duplicate prefixes rejected case-insensitively; format `^[A-Z][A-Z0-9]{1,9}$`. Existing (pre-feature) tasks are not retro-keyed — only new tasks after the prefix is set. | implemented |
+| D65 | Search matches issue keys: exact (`SBU-002`), sloppy (`sbu-2`, `sbu 2` → padded exact), and bare prefix (`SBU` → all) — in global search and All Tasks filter. | implemented |
+| D66 | Schema evolution: Alembic still deferred; a small idempotent startup migration (`ensure_schema_upgrades`) ALTERs live tables and creates the unique indexes (areas.key_prefix, tasks.issue_key). | implemented |
+
 ## Open questions for the owner (doc review)
 
 1. Any **proposal** rows above to veto? (esp. D13, D14, D28–D31, D34, D39, D40)

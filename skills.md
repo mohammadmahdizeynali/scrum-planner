@@ -121,6 +121,17 @@
 - [x] Telegram from this VPS: BLOCKED (DNS interception + IP block). Backup Telegram channel is
       env-activated and will work on the owner's planned external server.
 
+- **`create_all()` does NOT alter existing tables** — the live DB was created before
+  `key_prefix`/`issue_key` existed. Added an idempotent startup migration
+  (`ensure_schema_upgrades` in main.py: inspect columns → ALTER TABLE ADD COLUMN → CREATE UNIQUE
+  INDEX IF NOT EXISTS). Any future column addition must be added there (or switch to Alembic).
+- When rewriting a chunk of a file via Edit, old helper functions can silently vanish
+  (`_area_counts` was dropped with the header rewrite → 24 test errors). After surgical edits,
+  grep for the names you know must exist.
+- Jira-style issue keys: per-area counter column (`task_counter`) beats max()-lookup (atomic,
+  no gaps on delete); keys are immutable identity — never re-key on parent move; sloppy search
+  input ("sbu-2") should normalize to the padded exact key before matching.
+
 ## Hard-won lessons (build/deploy phase)
 
 - `python:3.12-slim` is now **Debian trixie** — a `bookworm-pgdg` apt line breaks (libpq

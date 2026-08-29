@@ -56,6 +56,7 @@ function TaskCard({
         </button>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
+        {task.issue_key && <span className="chip tnum bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">{task.issue_key}</span>}
         <AreaChip name={task.project_name ?? task.area_name} color={task.area_color} />
         <PriorityBadge priority={task.priority} />
         {source === "carry_over" && <span className="chip bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">انتقال‌یافته</span>}
