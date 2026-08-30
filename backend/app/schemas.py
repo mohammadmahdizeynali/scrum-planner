@@ -250,7 +250,6 @@ class SprintOut(ORMModel):
     end_at: datetime
     status: str
     closed_at: datetime | None
-    estimate_minutes: int = 0
 
 
 class SprintMemberOut(BaseModel):

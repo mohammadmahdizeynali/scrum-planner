@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { api } from "../../api/client";
-import type { Sprint, Task, TimeEntryRef } from "../../api/types";
+import type { Task, TimeEntryRef } from "../../api/types";
 import { Modal, Spinner, Toggle, useToast } from "../../components/ui";
 import { clockOf, faDate, faDateRange, fmtDuration, minutesOfClock, toFa, WEEKDAYS_FA } from "../../lib/format";
 import {
@@ -94,20 +94,6 @@ export default function TimesheetPage() {
       }),
     enabled: !!weekStart,
   });
-
-  // weekly sprint → per-day pace target (estimate / 7)
-  const { data: weekSprints } = useQuery({
-    queryKey: ["week-sprint", startIso],
-    queryFn: () =>
-      api<Sprint[]>("/v1/sprints", { params: { from: startIso, to: endIso } }),
-    enabled: !!weekStart,
-  });
-  const pacePerDay = useMemo(() => {
-    const s = weekSprints?.[0];
-    const est = s?.estimate_minutes ?? 0;
-    if (!s || est <= 0) return 0;
-    return Math.round(est / 7);
-  }, [weekSprints]);
 
   const navWeek = (delta: number) => {
     if (!weekStart) return;
@@ -470,13 +456,6 @@ export default function TimesheetPage() {
                     if (ev.target === ev.currentTarget) beginPointer(ev, "create");
                   }}
                 >
-                  {pacePerDay > 0 && (
-                    <div
-                      className="pointer-events-none absolute inset-x-0 z-[15] border-t border-dashed border-emerald-500/80"
-                      style={{ top: (pacePerDay / 60) * HOUR_PX }}
-                      title={`هدف روزانه: ${fmtDuration(pacePerDay)}`}
-                    />
-                  )}
                   {i === todayIndex && (
                     <div className="pointer-events-none absolute inset-x-0 z-30" style={{ top: (nowMin / 60) * HOUR_PX }}>
                       <div className="border-t-2 border-red-500/80" />
@@ -508,7 +487,6 @@ export default function TimesheetPage() {
         </div>
         <div className="border-t border-slate-200 px-4 py-1.5 text-[11px] text-slate-400 dark:border-slate-800">
           برای ثبت زمان روی خانه‌های خالی بکشید · برای جابه‌جایی بلوک را بگیرید · لبه بالا/پایین = تغییر مدت · کلیک = ویرایش
-          {pacePerDay > 0 && <> · <span className="text-emerald-500">خط سبز</span> = هدف روزانه ({fmtDuration(pacePerDay)})</>}
         </div>
       </div>
 
@@ -519,7 +497,6 @@ export default function TimesheetPage() {
         nowMin={nowMin}
         placed={placed}
         lanesByDay={lanesByDay}
-        pacePerDay={pacePerDay}
         selDay={mobileDay}
         setSelDay={setMobileDay}
         onOpenEntry={(e) => setModal({ mode: "edit", dayIndex: e.dayIndex, startMin: e.startMin, endMin: e.startMin + e.minutes, entry: e })}
@@ -552,7 +529,6 @@ function MobileDayView({
   nowMin,
   placed,
   lanesByDay,
-  pacePerDay,
   selDay,
   setSelDay,
   onOpenEntry,
@@ -563,7 +539,6 @@ function MobileDayView({
   nowMin: number;
   placed: PlacedEntry[];
   lanesByDay: Record<number, { items: { entry: PlacedEntry; lane: number }[]; laneCount: number }>;
-  pacePerDay: number;
   selDay: number;
   setSelDay: (i: number) => void;
   onOpenEntry: (e: PlacedEntry) => void;
@@ -690,13 +665,6 @@ function MobileDayView({
               {Array.from({ length: 24 }, (_, h) => (
                 <div key={`hh${h}`} className="pointer-events-none absolute inset-x-0 border-t border-dashed border-slate-100 dark:border-slate-800/50" style={{ top: h * MOBILE_HOUR_PX + MOBILE_HOUR_PX / 2 }} />
               ))}
-              {pacePerDay > 0 && (
-                <div
-                  className="pointer-events-none absolute inset-x-0 z-20 border-t border-dashed border-emerald-500/80"
-                  style={{ top: (pacePerDay / 60) * MOBILE_HOUR_PX }}
-                  title={`هدف روزانه: ${fmtDuration(pacePerDay)}`}
-                />
-              )}
               {selDay === todayIndex && (
                 <div className="pointer-events-none absolute inset-x-0 z-30" style={{ top: (nowMin / 60) * MOBILE_HOUR_PX }}>
                   <div className="border-t-2 border-red-500/80" />
@@ -721,7 +689,6 @@ function MobileDayView({
         </div>
         <div className="mt-2 text-center text-[11px] leading-4 text-slate-400">
           برای ثبت زمان، روی تقویم بکشید · برای ویرایش، روی یک ثبت بزنید
-          {pacePerDay > 0 && <> · <span className="text-emerald-500">خط سبز</span> = هدف روزانه</>}
         </div>
       </div>
 

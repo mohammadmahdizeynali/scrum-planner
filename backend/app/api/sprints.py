@@ -87,27 +87,7 @@ def list_sprints(
         q = q.where(Sprint.end_at > from_dt)
     if to_dt is not None:
         q = q.where(Sprint.start_at < to_dt)
-    sprints = db.scalars(q.limit(200)).all()
-    est_map = dict(
-        db.query(SprintMembership.sprint_id, func.coalesce(func.sum(Task.estimate_minutes), 0))
-        .join(Task, Task.id == SprintMembership.task_id)
-        .join(Sprint, Sprint.id == SprintMembership.sprint_id)
-        .filter(Sprint.user_id == user.id)
-        .group_by(SprintMembership.sprint_id)
-        .all()
-    )
-    return [
-        SprintOut(
-            id=s.id,
-            name=s.name,
-            start_at=s.start_at,
-            end_at=s.end_at,
-            status=s.status,
-            closed_at=s.closed_at,
-            estimate_minutes=int(est_map.get(s.id, 0)),
-        )
-        for s in sprints
-    ]
+    return db.scalars(q.limit(200)).all()
 
 
 @router.get("/{sprint_id}", response_model=SprintDetail)
