@@ -24,7 +24,7 @@ is used from desktop and mobile browsers, and installs as a PWA.
 
 Screens: **اسپرینت** (current sprint board) · **تایم‌شیت** (weekly logging calendar) ·
 **گزارش‌ها** (monthly + archived weekly) · **همه تسک‌ها** (global backlog list) ·
-**حوزه‌ها** (areas & projects) · **تنظیمات** (profile, timezone, theme, password, backups).
+**مسیرها** (areas & projects) · **تنظیمات** (profile, timezone, theme, password, backups).
 
 ---
 

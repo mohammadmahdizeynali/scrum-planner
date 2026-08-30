@@ -22,7 +22,7 @@ const NAV = [
   { to: "/timesheet", label: "ثبت زمان", icon: CalendarDays },
   { to: "/reports", label: "گزارش‌ها", icon: BarChart3 },
   { to: "/tasks", label: "انبار", icon: ListTodo },
-  { to: "/areas", label: "حوزه‌ها", icon: Boxes },
+  { to: "/areas", label: "مسیرها", icon: Boxes },
 ];
 
 export function useMe() {

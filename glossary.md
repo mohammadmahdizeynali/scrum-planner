@@ -7,11 +7,11 @@
 
 | Term (code) | UI (fa) | Meaning |
 | --- | --- | --- |
-| Area / "Big Project" | حوزه | Top-level life area (University, Freelance, Personal). Holds projects AND area-level tasks. |
+| Area / "Big Project" | مسیر | Top-level life area (University, Freelance, Personal). Holds projects AND area-level tasks. Renamed from «حوزه» to «مسیر» at the owner's request. Code identifiers stay `Area`/`areas`. |
 | Project | پروژه | Sub-section of an area (a course, a client). Holds tasks. |
 | Task | تسک | The unit of work. May belong to a project, to an area directly, or to nothing (standalone). |
 | Standalone task | تسک مستقل | Task with no area and no project (quick ad-hoc items). Always sprint-tracked by the user in practice. |
-| Area-level task | تسک حوزه‌ای | Task belonging to an area directly, not to any of its projects. |
+| Area-level task | تسک مسیر | Task belonging to an area directly, not to any of its projects. |
 | Subtask / checklist item | زیرتسک / چک‌لیست | Checkable step inside a task. |
 | Sprint | اسپرینت | Fixed one-week period, Saturday 00:00 → Friday 24:00 (user's timezone). One per week. |
 | Sprint membership | عضویت در اسپرینت | Record that a task belongs to a sprint. A task can be a member of multiple sprints over time (carry-over). |

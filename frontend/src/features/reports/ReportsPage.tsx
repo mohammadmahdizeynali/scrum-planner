@@ -42,7 +42,7 @@ function AreaProjectTable({ data }: { data: BaseReport }) {
             ))}
             {a.area_id && a.area_level_minutes > 0 && (
               <div className="flex items-center gap-2 text-sm text-slate-500">
-                <span>وظایف حوزه</span>
+                <span>وظایف مسیر</span>
                 <span className="tnum text-xs text-slate-400">{fmtDuration(a.area_level_minutes)}</span>
               </div>
             )}
@@ -194,7 +194,7 @@ function TimePie({ data, projectColors }: { data: BaseReport; projectColors: Map
         });
     }
     if (a.area_level_minutes > 0 && a.area_id)
-      slices.push({ key: `al:${a.area_id}`, label: `وظایف حوزه ${a.name}`, minutes: a.area_level_minutes, color: a.color });
+      slices.push({ key: `al:${a.area_id}`, label: `وظایف مسیر ${a.name}`, minutes: a.area_level_minutes, color: a.color });
     if (a.area_id === null && a.minutes > 0)
       slices.push({ key: "standalone", label: "تسک‌های مستقل", minutes: a.minutes, color: a.color });
   }

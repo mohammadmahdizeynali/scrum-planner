@@ -46,7 +46,7 @@ def _normalize_prefix(value: str | None) -> str | None:
     if not _KEY_PREFIX_RE.match(kp):
         raise HTTPException(
             status_code=422,
-            detail="کلید حوزه باید ۲ تا ۱۰ نویسه لاتین باشد و با حرف شروع شود (مثلا SBU).",
+            detail="کلید مسیر باید ۲ تا ۱۰ نویسه لاتین باشد و با حرف شروع شود (مثلا SBU).",
         )
     return kp
 
@@ -89,7 +89,7 @@ def create_area(body: AreaIn, user: User = Depends(get_current_user), db: Sessio
     data = body.model_dump()
     kp = _normalize_prefix(data.pop("key_prefix", None))
     if kp is not None and db.scalar(select(Area).where(Area.key_prefix == kp)) is not None:
-        raise HTTPException(status_code=409, detail="این پیشوند قبلاً برای حوزه دیگری استفاده شده است.")
+        raise HTTPException(status_code=409, detail="این پیشوند قبلاً برای مسیر دیگری استفاده شده است.")
     area = Area(user_id=user.id, key_prefix=kp, **data)
     db.add(area)
     db.commit()
@@ -100,7 +100,7 @@ def create_area(body: AreaIn, user: User = Depends(get_current_user), db: Sessio
 def _get_area(db, user, area_id) -> Area:
     area = db.get(Area, area_id)
     if area is None or area.user_id != user.id:
-        raise HTTPException(status_code=404, detail="حوزه پیدا نشد.")
+        raise HTTPException(status_code=404, detail="مسیر پیدا نشد.")
     return area
 
 
@@ -115,10 +115,10 @@ def update_area(area_id: uuid.UUID, body: AreaUpdateIn, user: User = Depends(get
             if area.key_prefix and int(keyed or 0) > 0:
                 raise HTTPException(
                     status_code=409,
-                    detail="این حوزه تسک با کلید دارد؛ پیشوند برای حفظ هویت کلیدها قابل تغییر نیست.",
+                    detail="این مسیر تسک با کلید دارد؛ پیشوند برای حفظ هویت کلیدها قابل تغییر نیست.",
                 )
             if kp is not None and db.scalar(select(Area).where(Area.key_prefix == kp, Area.id != area.id)) is not None:
-                raise HTTPException(status_code=409, detail="این پیشوند قبلاً برای حوزه دیگری استفاده شده است.")
+                raise HTTPException(status_code=409, detail="این پیشوند قبلاً برای مسیر دیگری استفاده شده است.")
             data["key_prefix"] = kp
             if kp is None:
                 area.task_counter = 0
@@ -163,10 +163,10 @@ def delete_area(
     area = _get_area(db, user, area_id)
     if mode == "move":
         if target_area_id is None:
-            raise HTTPException(status_code=422, detail="حوزه مقصد را انتخاب کنید.")
+            raise HTTPException(status_code=422, detail="مسیر مقصد را انتخاب کنید.")
         target = _get_area(db, user, target_area_id)
         if target.id == area.id:
-            raise HTTPException(status_code=422, detail="حوزه مقصد باید متفاوت باشد.")
+            raise HTTPException(status_code=422, detail="مسیر مقصد باید متفاوت باشد.")
         for p in db.scalars(select(Project).where(Project.area_id == area.id)).all():
             p.area_id = target.id
         for t in db.scalars(select(Task).where(Task.area_id == area.id)).all():
@@ -196,7 +196,7 @@ def list_projects(area_id: uuid.UUID | None = None, user: User = Depends(get_cur
 def create_project(body: ProjectIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     area = db.get(Area, body.area_id)
     if area is None or area.user_id != user.id:
-        raise HTTPException(status_code=404, detail="حوزه پیدا نشد.")
+        raise HTTPException(status_code=404, detail="مسیر پیدا نشد.")
     project = Project(user_id=user.id, **body.model_dump())
     db.add(project)
     db.commit()
@@ -218,7 +218,7 @@ def update_project(project_id: uuid.UUID, body: ProjectUpdateIn, user: User = De
     if "area_id" in data and data["area_id"] is not None:
         new_area = db.get(Area, data["area_id"])
         if new_area is None or new_area.user_id != user.id:
-            raise HTTPException(status_code=404, detail="حوزه پیدا نشد.")
+            raise HTTPException(status_code=404, detail="مسیر پیدا نشد.")
     for field, value in data.items():
         setattr(project, field, value)
     db.commit()

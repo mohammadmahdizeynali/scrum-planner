@@ -39,21 +39,21 @@ function AreaFormModal({
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["areas"] });
       qc.invalidateQueries({ queryKey: ["tasks"] });
-      toast.push(area ? "حوزه ویرایش شد." : "حوزه ساخته شد.");
+      toast.push(area ? "مسیر ویرایش شد." : "مسیر ساخته شد.");
       onClose();
     },
     onError: (e) => toast.push((e as Error).message, "error"),
   });
 
   return (
-    <Modal open={open} onClose={onClose} title={area ? "ویرایش حوزه" : "حوزه جدید"}>
+    <Modal open={open} onClose={onClose} title={area ? "ویرایش مسیر" : "مسیر جدید"}>
       <div className="space-y-3">
-        <Field label="نام حوزه">
+        <Field label="نام مسیر">
           <input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="مثلا: دانشگاه" />
         </Field>
         <Field
           label="کلید تسک‌ها (پیشوند)"
-          hint={prefixLocked ? "این حوزه تسک کلیددار دارد؛ برای حفظ هویت کلیدها (مثل SBU-001) قابل تغییر نیست." : "حروف لاتین، مثلا SBU → کلید تسک‌ها: SBU-001، SBU-002 …"}
+          hint={prefixLocked ? "این مسیر تسک کلیددار دارد؛ برای حفظ هویت کلیدها (مثل SBU-001) قابل تغییر نیست." : "حروف لاتین، مثلا SBU → کلید تسک‌ها: SBU-001، SBU-002 …"}
         >
           <input
             className="input tnum"
@@ -77,7 +77,7 @@ function AreaFormModal({
             ))}
           </div>
         </Field>
-        <Toggle checked={billable} onChange={setBillable} label="ثبت زمان‌های این حوزه به‌طور پیش‌فرض قابل‌صدور فاکتور باشند" />
+        <Toggle checked={billable} onChange={setBillable} label="ثبت زمان‌های این مسیر به‌طور پیش‌فرض قابل‌صدور فاکتور باشند" />
         <div className="flex justify-start gap-2 pt-1">
           <button className="btn-primary" disabled={!name.trim() || save.isPending} onClick={() => save.mutate()}>
             ذخیره
@@ -129,14 +129,14 @@ function AreaTaskModal({ open, onClose, area }: { open: boolean; onClose: () => 
     mutationFn: () => api("/v1/tasks", { method: "POST", body: { title: title.trim(), area_id: area.id } }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
-      toast.push("تسک حوزه‌ای ساخته شد.");
+      toast.push("تسک مسیر ساخته شد.");
       setTitle("");
       onClose();
     },
     onError: (e) => toast.push((e as Error).message, "error"),
   });
   return (
-    <Modal open={open} onClose={onClose} title={`تسک حوزه‌ای برای «${area.name}»`}>
+    <Modal open={open} onClose={onClose} title={`تسک مسیر برای «${area.name}»`}>
       <Field label="عنوان">
         <input className="input" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} />
       </Field>
@@ -168,21 +168,21 @@ function DeleteAreaModal({ open, onClose, area, projects }: { open: boolean; onC
       }),
     onSuccess: () => {
       qc.invalidateQueries();
-      toast.push("حوزه حذف شد.");
+      toast.push("مسیر حذف شد.");
       onClose();
     },
     onError: (e) => toast.push((e as Error).message, "error"),
   });
 
   return (
-    <Modal open={open} onClose={onClose} title={`حذف حوزه «${area?.name}»`}>
+    <Modal open={open} onClose={onClose} title={`حذف مسیر «${area?.name}»`}>
       <div className="space-y-3 text-sm">
         <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
           <input type="radio" checked={mode === "move"} onChange={() => setMode("move")} className="mt-1 accent-indigo-600" />
           <span>
-            <b>انتقال محتوا</b> — پروژه‌ها و تسک‌های حوزه‌ای به حوزه دیگری منتقل می‌شوند.
+            <b>انتقال محتوا</b> — پروژه‌ها و تسک‌های مسیر به مسیر دیگری منتقل می‌شوند.
             <select className="input mt-2" value={target} onChange={(e) => setTarget(e.target.value)} disabled={mode !== "move"}>
-              <option value="">حوزه مقصد…</option>
+              <option value="">مسیر مقصد…</option>
               {targets.map((a) => (
                 <option key={a.id} value={a.id}>{a.name}</option>
               ))}
@@ -192,7 +192,7 @@ function DeleteAreaModal({ open, onClose, area, projects }: { open: boolean; onC
         <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
           <input type="radio" checked={mode === "purge"} onChange={() => setMode("purge")} className="mt-1 accent-red-600" />
           <span>
-            <b>حذف کامل</b> — همه پروژه‌ها، تسک‌ها و زمان‌های ثبت‌شده این حوزه برای همیشه پاک می‌شوند.
+            <b>حذف کامل</b> — همه پروژه‌ها، تسک‌ها و زمان‌های ثبت‌شده این مسیر برای همیشه پاک می‌شوند.
           </span>
         </label>
         <div className="flex justify-start gap-2 pt-1">
@@ -236,20 +236,20 @@ export default function AreasPage() {
   return (
     <main className="mx-auto max-w-5xl p-4 md:p-6">
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="page-title">حوزه‌ها</h1>
+        <h1 className="page-title">مسیرها</h1>
         <button className="btn-primary" onClick={() => setCreateOpen(true)}>
-          <Plus size={16} /> حوزه جدید
+          <Plus size={16} /> مسیر جدید
         </button>
       </div>
 
       {(areas ?? []).length === 0 ? (
         <EmptyState
           icon={<Boxes size={36} />}
-          title="هنوز حوزه‌ای نساخته‌اید"
-          hint="حوزه‌ها دسته‌های اصلی زندگی شما هستند — مثلا دانشگاه، فریلنسری یا زندگی شخصی. هر حوزه می‌تواند چند پروژه (درس یا مشتری) داشته باشد."
+          title="هنوز مسیری نساخته‌اید"
+          hint="مسیرها دسته‌های اصلی زندگی شما هستند — مثلا دانشگاه، فریلنسری یا زندگی شخصی. هر مسیر می‌تواند چند پروژه (درس یا مشتری) داشته باشد."
           action={
             <button className="btn-primary mt-2" onClick={() => setCreateOpen(true)}>
-              ساخت اولین حوزه
+              ساخت اولین مسیر
             </button>
           }
         />
@@ -306,7 +306,7 @@ export default function AreasPage() {
                     <Plus size={13} /> پروژه
                   </button>
                   <button className="btn-secondary flex-1 !py-1.5 text-xs" onClick={() => setTaskArea(a)}>
-                    <Plus size={13} /> تسک حوزه‌ای
+                    <Plus size={13} /> تسک مسیر
                   </button>
                 </div>
               </div>
@@ -331,7 +331,7 @@ export default function AreasPage() {
         <div className="space-y-2 text-sm">
           <label className="flex items-center gap-2">
             <input type="radio" checked={projectDeleteMode === "move"} onChange={() => setProjectDeleteMode("move")} className="accent-indigo-600" />
-            منتقل شوند به سطح حوزه
+            منتقل شوند به سطح مسیر
           </label>
           <label className="flex items-center gap-2">
             <input type="radio" checked={projectDeleteMode === "purge"} onChange={() => setProjectDeleteMode("purge")} className="accent-red-600" />

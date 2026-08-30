@@ -144,7 +144,7 @@ class TaskCreateIn(BaseModel):
     @model_validator(mode="after")
     def check_home(self):
         if self.area_id and self.project_id:
-            raise ValueError("یک تسک نمی‌تواند همزمان به حوزه و پروژه متصل باشد.")
+            raise ValueError("یک تسک نمی‌تواند همزمان به مسیر و پروژه متصل باشد.")
         return self
 
 
@@ -167,7 +167,7 @@ class TaskUpdateIn(BaseModel):
     @model_validator(mode="after")
     def check_home(self):
         if self.area_id and self.project_id:
-            raise ValueError("یک تسک نمی‌تواند همزمان به حوزه و پروژه متصل باشد.")
+            raise ValueError("یک تسک نمی‌تواند همزمان به مسیر و پروژه متصل باشد.")
         return self
 
 

@@ -251,7 +251,7 @@ export default function TaskDetailDrawer({ taskId, onClose }: { taskId: string; 
               <option value="">مستقل (بدون دسته)</option>
               {(areas ?? []).map((a) => (
                 <optgroup key={a.id} label={a.name}>
-                  <option value={a.id}>{a.name} (تسک حوزه‌ای)</option>
+                  <option value={a.id}>{a.name} (تسک مسیر)</option>
                   {(projects ?? [])
                     .filter((p) => p.area_id === a.id)
                     .map((p) => (

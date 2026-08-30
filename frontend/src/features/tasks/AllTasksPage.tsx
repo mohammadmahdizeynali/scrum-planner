@@ -176,7 +176,7 @@ export default function AllTasksPage() {
           <input className="input !ps-9" placeholder="جستجو در عنوان و کلید تسک…" value={filters.q} onChange={(e) => setFilter("q", e.target.value)} />
         </div>
         <select className="input !w-auto" value={filters.area_id} onChange={(e) => setFilter("area_id", e.target.value)}>
-          <option value="">همه حوزه‌ها</option>
+          <option value="">همه مسیرها</option>
           {(areas ?? []).map((a) => (
             <option key={a.id} value={a.id}>{a.name}</option>
           ))}
@@ -468,7 +468,7 @@ function CreateTaskModal({
             <option value="">مستقل (بدون دسته)</option>
             {areas.map((a) => (
               <optgroup key={a.id} label={a.name}>
-                <option value={a.id}>{a.name} (تسک حوزه‌ای)</option>
+                <option value={a.id}>{a.name} (تسک مسیر)</option>
                 {projects
                   .filter((p) => p.area_id === a.id)
                   .map((p) => (

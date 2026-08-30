@@ -37,7 +37,7 @@ def _validate_parents(db: Session, user: User, area_id, project_id):
     if area_id is not None:
         area = db.get(Area, area_id)
         if area is None or area.user_id != user.id:
-            raise HTTPException(status_code=404, detail="حوزه پیدا نشد.")
+            raise HTTPException(status_code=404, detail="مسیر پیدا نشد.")
         return (area_id, None)
     return (None, None)
 

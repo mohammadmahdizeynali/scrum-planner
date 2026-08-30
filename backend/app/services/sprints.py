@@ -28,7 +28,7 @@ from app.services.recurrence import create_next_occurrence, task_has_recurrence
 class LocationResolver:
     """Resolves (area_id, area_name, area_color, project_id, project_name) with caching.
 
-    Standalone tasks map to a virtual area «بدون حوزه».
+    Standalone tasks map to a virtual area «بدون مسیر».
     """
 
     def __init__(self, db: Session):
@@ -58,7 +58,7 @@ class LocationResolver:
         if task.area_id is not None:
             area_name, area_color = self._area(task.area_id)
             return (task.area_id, area_name, area_color, None, None)
-        return (None, "بدون حوزه", "#94a3b8", None, None)
+        return (None, "بدون مسیر", "#94a3b8", None, None)
 
 
 def ensure_sprint(db: Session, user: User, at: datetime) -> Sprint:
