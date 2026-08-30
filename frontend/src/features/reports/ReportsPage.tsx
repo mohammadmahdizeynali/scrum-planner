@@ -5,7 +5,7 @@ import { ArrowLeft, BarChart3, CheckCircle2, ChevronLeft, ChevronRight, Clock, F
 import { api } from "../../api/client";
 import type { BaseReport, MonthlyReport, Project, TrendData, WeeklyReport } from "../../api/types";
 import { EmptyState, PageSpinner, ProgressBar } from "../../components/ui";
-import { faDate, faMonth, faPercent, fmtDuration, JALALI_MONTHS, toFa } from "../../lib/format";
+import { faDate, faMonth, fmtDuration, JALALI_MONTHS, toFa } from "../../lib/format";
 import { toJalali } from "../../lib/jalaali";
 import { utcToZonedParts } from "../../lib/tz";
 
@@ -111,7 +111,7 @@ function TaskBreakdown({ data }: { data: BaseReport }) {
       </div>
       {data.tasks.length > 10 && (
         <button className="btn-ghost mt-2 text-xs" onClick={() => setShowAll(!showAll)}>
-          {showAll ? "نمایش کمتر" : `نمایش همه (${toFa(data.tasks.length)})`}
+          {showAll ? "نمایش کمتر" : `نمایش همه (${data.tasks.length})`}
         </button>
       )}
     </div>
@@ -125,7 +125,7 @@ function CompletedList({ data }: { data: BaseReport }) {
       <h3 className="mb-3 flex items-center gap-2 font-bold">
         <CheckCircle2 size={17} className="text-emerald-500" />
         تسک‌های انجام‌شده
-        <span className="chip bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300 tnum">{toFa(data.completed.length)}</span>
+        <span className="chip bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300 tnum">{data.completed.length}</span>
       </h3>
       <div className="space-y-1.5">
         {data.completed.map((c) => (
@@ -146,7 +146,7 @@ function SummaryCards({ data }: { data: BaseReport }) {
   const cards = [
     { label: "مجموع زمان", value: fmtDuration(data.total_minutes), icon: <Clock size={18} /> },
     { label: "قابل‌صدور فاکتور", value: fmtDuration(data.billable_minutes), icon: <Wallet size={18} /> },
-    { label: "انجام‌شده", value: toFa(data.completed.length), icon: <CheckCircle2 size={18} /> },
+    { label: "انجام‌شده", value: String(data.completed.length), icon: <CheckCircle2 size={18} /> },
   ];
   return (
     <div className="grid grid-cols-3 gap-3">
@@ -260,7 +260,7 @@ function TimePie({ data, projectColors }: { data: BaseReport; projectColors: Map
                   fill={light ? "#334155" : "#ffffff"}
                   style={{ paintOrder: "stroke", stroke: light ? "#ffffffaa" : "#00000055", strokeWidth: 3 }}
                 >
-                  {faPercent(seg.frac * 100)}
+                  {Math.round(seg.frac * 100)}%
                 </text>
               );
             })}
@@ -282,7 +282,7 @@ function TimePie({ data, projectColors }: { data: BaseReport; projectColors: Map
             >
               <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: seg.color }} />
               <span className="min-w-0 flex-1 truncate">{seg.label}</span>
-              <span className="chip bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">{faPercent(seg.frac * 100)}</span>
+              <span className="chip bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">{Math.round(seg.frac * 100)}%</span>
               <span className="tnum shrink-0 text-xs text-slate-500 dark:text-slate-400">{fmtDuration(seg.minutes)}</span>
             </div>
           ))}
@@ -573,7 +573,7 @@ function TrendCharts({ tz }: { tz: string }) {
   return (
     <div className="card p-5">
       <div className="mb-1 flex items-center justify-between">
-        <h3 className="font-bold">روند ۸ هفتهٔ اخیر</h3>
+        <h3 className="font-bold">روند 8 هفتهٔ اخیر</h3>
         <span className="text-[11px] text-slate-400">ثبت‌شده در برابر برآورد هر هفته</span>
       </div>
 

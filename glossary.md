@@ -49,6 +49,9 @@ auto-transition to `Open` is a convenience nudge, matching the owner's described
 - **Durations (owner-decided 2026-08-29, final):** display via `fmtDuration` — compact Latin
   `1h 15 min`, `2h`, `45 min`. **Never decimal hours.** Entry via `DurationInput`: two
   side-by-side boxes `[ h ] [ min ]` — the `2:15`/decimal text-input styles are banned.
+- **Chart/section numbers (owner refinement, 2026-08-30):** on the Reports page the donut
+  percents, completed counts, and trend title use **Latin digits + Latin `%`** (e.g. `45%`).
+  Jalali date labels keep Persian digits; durations stay `1h 15 min`.
 - **Week:** Saturday → Friday. Saturday is the first day, shown at the **right** edge in RTL.
 - **Date ranges:** collapse shared month/year — `هفته‌ی ۷ تا ۱۳ شهریور ۱۴۰۵`,
   `۳۱ مرداد تا ۶ شهریور ۱۴۰۵` (see `faDateRange`).
