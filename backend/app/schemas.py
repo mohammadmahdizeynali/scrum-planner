@@ -285,4 +285,9 @@ class SprintCloseIn(BaseModel):
     decisions: list[CloseDecision] = []
 
 
+class PlanningSuggestion(BaseModel):
+    task: TaskOut
+    reasons: list[str]
+
+
 TaskDetail.model_rebuild()

@@ -132,6 +132,14 @@
 | D72 | Morning briefing (06:00 local, tunable): current sprint tasks grouped by status with issue key + estimate/logged, and a مهلت‌ها section (overdue / today / tomorrow) covering deadline reminders for ALL non-closed tasks. Evening summary (23:00 local, tunable): per-task logged time for the day, billable split omitted, tasks closed today. | implemented |
 | D73 | Delivery reuses the backup Telegram credentials (dedicated notify_* envs may override); messages are HTML with escaping, chunked under Telegram's 4096-char limit; missed daily slots are skipped (no stale digests); admin-only preview endpoint `/api/v1/notify/preview` renders the exact text without sending. | implemented |
 
+## Planning assistant + recurring auto-inject (2026-08-30)
+
+| # | Decision | Status |
+| --- | --- | --- |
+| D74 | Recurring tasks (backlog/open, with a rule) are AUTO-INJECTED into every newly created sprint (source=manual, backlog→open). The owner explicitly chose auto-inject over suggest-only for routine work; removing a task from the sprint is still possible and won't re-inject (injection runs only at sprint creation). | agreed (owner request) |
+| D75 | Planning assistant = READ-ONLY suggestions: `GET /sprints/current/suggestions` returns reason-tagged non-member tasks (overdue / due_this_week / logged_last_week / recurring), sorted by urgency. UI: a slim banner only while the sprint is empty (dismissable per sprint via localStorage) + a compact «پیشنهادها (N)» header chip; confirming goes through the normal add-tasks endpoint. The sprint loop and mid-week adds are untouched. | agreed (owner constraints: suggestion-only, no clutter) |
+| D76 | JSON columns and NULL: SQLAlchemy/psycopg store Python None in a JSON column as the JSON `null` *literal*, which `IS NOT NULL` matches. Any "has value" predicate on a JSON column must cast to text and exclude `'null'`/`'{}'` (see `task_has_recurrence` in services/recurrence.py). | implementation lesson |
+
 ## Open questions for the owner (doc review)
 
 1. Any **proposal** rows above to veto? (esp. D13, D14, D28–D31, D34, D39, D40)

@@ -211,6 +211,13 @@ export interface TaskListResponse {
   total: number;
 }
 
+export type SuggestionReason = "overdue" | "due_this_week" | "logged_last_week" | "recurring";
+
+export interface PlanningSuggestion {
+  task: Task;
+  reasons: SuggestionReason[];
+}
+
 export interface BackupFile {
   name: string;
   size: number;

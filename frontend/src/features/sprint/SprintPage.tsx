@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -11,12 +11,14 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { CalendarClock, CheckCircle2, Hourglass, ListPlus, PlayCircle, X } from "lucide-react";
+import { AlertTriangle, CalendarClock, CheckCircle2, Hourglass, ListPlus, PlayCircle, Sparkles, X } from "lucide-react";
 import { api } from "../../api/client";
 import type { SprintDetail, Task } from "../../api/types";
 import { Modal, PageSpinner, PriorityBadge, AreaChip, ProgressBar, Spinner, Toggle, useToast, EmptyState, ConfirmDialog, cn, DurationInput } from "../../components/ui";
 import { fmtDuration, fmtEstimateLogged, STATUS_FA } from "../../lib/format";
 import TaskDetailDrawer from "../tasks/TaskDetailDrawer";
+import PlanningAssistantModal from "./PlanningAssistantModal";
+import type { PlanningSuggestion } from "../../api/types";
 
 const COLUMNS: { status: Task["status"]; label: string; icon: JSX.Element }[] = [
   { status: "open", label: "باز", icon: <ListPlus size={16} /> },
@@ -360,6 +362,24 @@ export default function SprintPage() {
   const [removeTarget, setRemoveTarget] = useState<Task | null>(null);
   const draggingRef = { current: false };
 
+  // planning assistant (suggestions only — nothing auto-added)
+  const { data: suggestionData } = useQuery({
+    queryKey: ["suggestions"],
+    queryFn: () => api<{ suggestions: PlanningSuggestion[] }>("/v1/sprints/current/suggestions"),
+    enabled: !!sprint && sprint.status === "active",
+  });
+  const assistantSuggestions = suggestionData?.suggestions ?? [];
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantDismissed, setAssistantDismissed] = useState(false);
+  useEffect(() => {
+    const key = `planner-assistant-dismissed-${sprint?.id ?? ""}`;
+    setAssistantDismissed(localStorage.getItem(key) === "1");
+  }, [sprint?.id]);
+  const dismissAssistant = () => {
+    if (sprint) localStorage.setItem(`planner-assistant-dismissed-${sprint.id}`, "1");
+    setAssistantDismissed(true);
+  };
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const byStatus = useMemo(() => {
@@ -446,6 +466,12 @@ export default function SprintPage() {
               </button>
             ) : (
               <>
+                {!assistantDismissed && assistantSuggestions.length > 0 && (
+                  <button className="btn-secondary" onClick={() => setAssistantOpen(true)} title="دستیار برنامه‌ریزی">
+                    <Sparkles size={15} className="text-indigo-500" />
+                    پیشنهادها ({assistantSuggestions.length})
+                  </button>
+                )}
                 <button className="btn-secondary" onClick={() => setCloseOpen(true)}>
                   بستن اسپرینت
                 </button>
@@ -471,6 +497,23 @@ export default function SprintPage() {
           </div>
         </div>
       </div>
+
+      {!closed && !assistantDismissed && assistantSuggestions.length > 0 && sprint.members.length === 0 && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-200 bg-indigo-50/70 px-3.5 py-2.5 text-sm dark:border-indigo-500/30 dark:bg-indigo-500/10">
+          <span>
+            <Sparkles size={14} className="me-1 inline text-indigo-500" />
+            برای شروع هفته <b>{assistantSuggestions.length} پیشنهاد</b> دارم — هر کدام را نخواستی، تیکش را بردار.
+          </span>
+          <span className="flex gap-1.5">
+            <button className="btn-ghost !py-1 text-xs" onClick={dismissAssistant}>
+              بی‌خیال
+            </button>
+            <button className="btn-primary !py-1 !px-3 text-xs" onClick={() => setAssistantOpen(true)}>
+              نمایش پیشنهادها
+            </button>
+          </span>
+        </div>
+      )}
 
       {sprint.members.length === 0 ? (
         <EmptyState
@@ -509,6 +552,12 @@ export default function SprintPage() {
       )}
 
       <AddTasksModal open={addOpen} onClose={() => setAddOpen(false)} sprint={sprint} />
+      <PlanningAssistantModal
+        open={assistantOpen}
+        onClose={() => setAssistantOpen(false)}
+        sprint={sprint}
+        suggestions={assistantSuggestions}
+      />
       <CloseSprintModal open={closeOpen} onClose={() => setCloseOpen(false)} sprint={sprint} />
       {detailTaskId && <TaskDetailDrawer taskId={detailTaskId} onClose={() => setDetailTaskId(null)} />}
       <ConfirmDialog

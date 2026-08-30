@@ -1,6 +1,9 @@
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import select
+
 from app.core.timeutils import format_jalali_date, week_start_utc
+from app.models import Task
 
 
 def test_current_sprint_autocreated_with_sat_fri_range(auth_client):
@@ -117,3 +120,108 @@ def test_close_sprint_with_decisions(auth_client, project):
     assert r2.status_code == 200
     r = auth_client.post(f"/api/v1/sprints/{sprint['id']}/reopen")
     assert r.status_code == 409
+
+
+def test_planning_suggestions(auth_client, area, project):
+    from datetime import datetime as dt
+
+    s = auth_client.get("/api/v1/sprints/current").json()
+    if s["status"] == "closed":
+        auth_client.post(f"/api/v1/sprints/{s['id']}/reopen")
+
+    start = week_start_utc(dt.now(timezone.utc), "Asia/Tehran")
+    today_local = dt.now(timezone.utc).astimezone(__import__("zoneinfo").ZoneInfo("Asia/Tehran")).date()
+
+    # overdue + due this week + recurring (all backlog, not members)
+    t_over = auth_client.post("/api/v1/tasks", json={
+        "title": "overdue", "project_id": project["id"],
+        "due_date": (today_local - timedelta(days=1)).isoformat(),
+    }).json()
+    t_due = auth_client.post("/api/v1/tasks", json={
+        "title": "due", "project_id": project["id"], "due_date": today_local.isoformat(),
+    }).json()
+    t_rec = auth_client.post("/api/v1/tasks", json={
+        "title": "recurring", "project_id": project["id"],
+        "recurrence_rule": {"kind": "weekly", "weekdays": [5]},
+    }).json()
+    # logged last week (entry inside previous sprint's window)
+    t_prev = auth_client.post("/api/v1/tasks", json={"title": "prevlogged"}).json()
+    prev_start = start - timedelta(days=7)
+    auth_client.post("/api/v1/time-entries", json={
+        "task_id": t_prev["id"],
+        "start_at": (prev_start + timedelta(days=2, hours=9)).isoformat(),
+        "end_at": (prev_start + timedelta(days=2, hours=10)).isoformat(),
+    })
+    # member task + closed task must NOT be suggested
+    t_member = auth_client.post("/api/v1/tasks", json={"title": "member"}).json()
+    auth_client.post(f"/api/v1/sprints/{s['id']}/tasks", json={"items": [{"task_id": t_member["id"]}]})
+    t_closed = auth_client.post("/api/v1/tasks", json={
+        "title": "closed", "due_date": today_local.isoformat(),
+    }).json()
+    auth_client.patch(f"/api/v1/tasks/{t_closed['id']}", json={"status": "closed"})
+
+    r = auth_client.get("/api/v1/sprints/current/suggestions")
+    assert r.status_code == 200, r.text
+    got = {sug["task"]["id"]: sug["reasons"] for sug in r.json()["suggestions"]}
+
+    assert "logged_last_week" in got[t_prev["id"]]
+    assert "recurring" in got[t_rec["id"]]
+    assert "due_this_week" in got[t_due["id"]]
+    assert "overdue" in got[t_over["id"]]
+    assert t_member["id"] not in got
+    assert t_closed["id"] not in got
+
+    # ordering: overdue first
+    ids = list(got.keys())
+    assert ids[0] == t_over["id"]
+
+    # suggestions are read-only: sprint membership unchanged
+    detail = auth_client.get(f"/api/v1/sprints/{s['id']}").json()
+    assert [m["task"]["id"] for m in detail["members"]] == [t_member["id"]]
+
+
+def test_recurring_tasks_auto_injected_on_new_sprint(auth_client, area):
+    t_rec = auth_client.post("/api/v1/tasks", json={
+        "title": "routine", "area_id": area["id"],
+        "recurrence_rule": {"kind": "weekly", "weekdays": [5]},
+    }).json()
+    t_plain = auth_client.post("/api/v1/tasks", json={"title": "plain", "area_id": area["id"]}).json()
+
+    from datetime import datetime as dt, timedelta, timezone as tzmod
+
+    from app.db import SessionLocal
+    from app.models import Sprint, SprintMembership, User
+    from app.services.sprints import ensure_sprint
+
+    db = SessionLocal()
+    try:
+        user = db.scalars(select(User)).first()
+        future = dt.now(tzmod.utc) + timedelta(days=14)  # a week with no sprint yet
+        sprint = ensure_sprint(db, user, future)
+        db.refresh(sprint)
+        member_ids = {
+            m.task_id
+            for m in db.scalars(select(SprintMembership).where(SprintMembership.sprint_id == sprint.id)).all()
+        }
+        assert t_rec["id"] in {str(i) for i in member_ids}
+        assert t_plain["id"] not in {str(i) for i in member_ids}
+        assert db.get(Task, t_rec["id"]).status == "open"  # backlog → open on inject
+
+        # idempotent: a second ensure must not duplicate the injection
+        ensure_sprint(db, user, future)
+        n = len(db.scalars(select(SprintMembership).where(SprintMembership.sprint_id == sprint.id)).all())
+        assert n == 1
+
+        # sanity: other sprints untouched
+        others = db.scalars(select(Sprint).where(Sprint.id != sprint.id)).all()
+        for other in others:
+            ids = {
+                str(m.task_id)
+                for m in db.scalars(select(SprintMembership).where(SprintMembership.sprint_id == other.id)).all()
+            }
+            assert t_rec["id"] not in ids
+        sprint_row = db.get(Sprint, sprint.id)
+        db.delete(sprint_row)
+        db.commit()
+    finally:
+        db.close()

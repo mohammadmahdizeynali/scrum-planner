@@ -2,10 +2,23 @@
 
 from datetime import date, timedelta
 
+from sqlalchemy import String, and_
+from sqlalchemy import cast as sa_cast
 from sqlalchemy.orm import Session
 
 from app.core.timeutils import get_tz, jalali_parts, jalali_month_length
 from app.models import Task, Tag, TaskTag, Subtask, User, utcnow
+
+
+def task_has_recurrence(TaskModel=Task):
+    """SQL predicate: the task actually has a recurrence rule.
+
+    JSON columns store Python None as the JSON `null` literal (not SQL NULL),
+    so `isnot(None)` alone matches rule-less tasks. Cast to text and exclude
+    the JSON null / empty-object renderings (PostgreSQL: json → text cast).
+    """
+    col_text = sa_cast(TaskModel.recurrence_rule, String)
+    return and_(col_text.is_not(None), col_text.notin_(["null", "{}"]))
 
 
 def compute_next_due(rule: dict, base: date) -> date | None:

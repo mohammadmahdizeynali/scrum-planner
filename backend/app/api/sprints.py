@@ -63,6 +63,18 @@ def get_current_sprint(user: User = Depends(get_current_user), db: Session = Dep
     return _detail(db, sprint)
 
 
+@router.get("/current/suggestions")
+def planning_suggestions(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Read-only planning assistant: reason-tagged task suggestions for the
+    active sprint. Nothing is mutated here — the UI confirms via the
+    add-tasks endpoint."""
+    sprint = sprint_service.current_sprint(db, user)
+    if sprint.status != "active":
+        return {"suggestions": []}
+    suggestions = sprint_service.planning_suggestions(db, user, sprint)
+    return {"suggestions": [{"task": s["task"], "reasons": s["reasons"]} for s in suggestions]}
+
+
 @router.get("", response_model=list[SprintOut])
 def list_sprints(
     from_dt: datetime | None = Query(default=None, alias="from"),

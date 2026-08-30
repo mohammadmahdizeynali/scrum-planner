@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.serialize import jsonable
-from app.core.timeutils import sprint_label, week_start_utc
+from app.core.timeutils import get_tz, sprint_label, to_utc, week_start_utc
 from app.models import (
     Area,
     MembershipSource,
@@ -22,7 +22,7 @@ from app.models import (
     utcnow,
 )
 from app.services.builders import _task_core_select, build_task_outs
-from app.services.recurrence import create_next_occurrence
+from app.services.recurrence import create_next_occurrence, task_has_recurrence
 
 
 class LocationResolver:
@@ -62,7 +62,8 @@ class LocationResolver:
 
 
 def ensure_sprint(db: Session, user: User, at: datetime) -> Sprint:
-    """Get-or-create the weekly sprint containing `at` (Sat 00:00 → Fri 24:00, user TZ)."""
+    """Get-or-create the weekly sprint containing `at` (Sat 00:00 → Fri 24:00, user TZ).
+    Newly created sprints get the user's active recurring tasks auto-injected."""
     start = week_start_utc(at, user.timezone)
     sprint = db.scalar(select(Sprint).where(Sprint.user_id == user.id, Sprint.start_at == start))
     if sprint is not None:
@@ -70,9 +71,30 @@ def ensure_sprint(db: Session, user: User, at: datetime) -> Sprint:
     end = start + timedelta(days=7)
     sprint = Sprint(user_id=user.id, name=sprint_label(start, user.timezone), start_at=start, end_at=end)
     db.add(sprint)
+    db.flush()
+    _inject_recurring_tasks(db, user, sprint)
     db.commit()
     db.refresh(sprint)
     return sprint
+
+
+def _inject_recurring_tasks(db: Session, user: User, sprint: Sprint) -> None:
+    """Auto-add the user's active recurring tasks (backlog/open, not already
+    members) to a newly created sprint — routine work plans itself."""
+    tasks = db.scalars(
+        select(Task).where(
+            Task.user_id == user.id,
+            task_has_recurrence(Task),
+            Task.status.in_([TaskStatus.backlog.value, TaskStatus.open.value]),
+            Task.id.notin_(
+                select(SprintMembership.task_id).where(SprintMembership.sprint_id == sprint.id)
+            ),
+        )
+    ).all()
+    for t in tasks:
+        db.add(SprintMembership(sprint_id=sprint.id, task_id=t.id, source=MembershipSource.manual.value))
+        if t.status == TaskStatus.backlog.value:
+            t.status = TaskStatus.open.value
 
 
 def current_sprint(db: Session, user: User) -> Sprint:
@@ -323,3 +345,72 @@ def build_weekly_payload(db: Session, user: User, sprint: Sprint) -> dict:
             "total_logged_minutes": sum(p["logged_minutes"] for p in est_by_project.values()),
         },
     }
+
+
+# ---------------- planning assistant (read-only suggestions) ----------------
+
+_REASON_RANK = {"overdue": 0, "due_this_week": 1, "logged_last_week": 2, "recurring": 3}
+
+
+def planning_suggestions(db: Session, user: User, sprint: Sprint) -> list[dict]:
+    """Suggest non-member tasks worth planning this week. Read-only: it never
+    mutates anything — the UI confirms through the normal add-tasks endpoint.
+
+    Reasons:
+      overdue          — due date already passed
+      due_this_week    — due on/before this sprint's Friday
+      logged_last_week — time was logged on it during the previous sprint
+      recurring        — task has a recurrence rule
+    """
+    if sprint.status != SprintStatus.active.value:
+        return []
+
+    member_ids = set(
+        db.scalars(select(SprintMembership.task_id).where(SprintMembership.sprint_id == sprint.id)).all()
+    )
+    base_conds = [Task.user_id == user.id, Task.status != TaskStatus.closed.value]
+    if member_ids:
+        base_conds.append(Task.id.notin_(member_ids))
+    rows = db.execute(_task_core_select().where(*base_conds)).all()
+    candidates = build_task_outs(db, rows)
+    if not candidates:
+        return []
+
+    prev_start = sprint.start_at - timedelta(days=7)
+    prev_logged = set(
+        db.scalars(
+            select(TimeEntry.task_id).where(
+                TimeEntry.user_id == user.id,
+                TimeEntry.start_at >= prev_start,
+                TimeEntry.start_at < sprint.start_at,
+            )
+        ).all()
+    )
+    recurring = set(
+        db.scalars(
+            select(Task.id).where(
+                Task.user_id == user.id, task_has_recurrence(Task)
+            )
+        ).all()
+    )
+    tz = get_tz(user.timezone)
+    today = to_utc(datetime.now(timezone.utc)).astimezone(tz).date()
+    friday = to_utc(sprint.end_at - timedelta(minutes=1)).astimezone(tz).date()
+
+    out = []
+    for t in candidates:
+        reasons = []
+        if t["due_date"] is not None:
+            if t["due_date"] < today:
+                reasons.append("overdue")
+            elif t["due_date"] <= friday:
+                reasons.append("due_this_week")
+        if t["id"] in prev_logged:
+            reasons.append("logged_last_week")
+        if t["id"] in recurring:
+            reasons.append("recurring")
+        if reasons:
+            out.append({"task": t, "reasons": reasons})
+
+    out.sort(key=lambda s: (min(_REASON_RANK[r] for r in s["reasons"]), -s["task"]["logged_minutes"]))
+    return out
