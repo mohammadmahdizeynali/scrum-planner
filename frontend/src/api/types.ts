@@ -112,6 +112,7 @@ export interface Sprint {
   end_at: string;
   status: "active" | "closed";
   closed_at: string | null;
+  estimate_minutes?: number;
 }
 
 export interface SprintMember {
