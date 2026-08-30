@@ -105,7 +105,9 @@ def daily_briefing_text(db, user, now: datetime | None = None) -> str:
     ).all()
     tasks = []
     if member_ids:
-        rows = db.execute(_task_core_select().where(Task.id.in_(member_ids))).all()
+        rows = db.execute(
+            _task_core_select().where(Task.id.in_(member_ids), Task.archived_at.is_(None))
+        ).all()
         tasks = build_task_outs(db, rows)
     tasks.sort(key=lambda t: (_STATUS_ORDER.get(t["status"], 9), 0 if t["priority"] == "high" else 1, t["sort_order"]))
 

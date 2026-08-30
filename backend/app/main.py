@@ -33,6 +33,8 @@ def ensure_schema_upgrades() -> None:
         cols = {c["name"] for c in insp.get_columns("tasks")}
         if "issue_key" not in cols:
             stmts.append("ALTER TABLE tasks ADD COLUMN issue_key VARCHAR(24)")
+        if "archived_at" not in cols:
+            stmts.append("ALTER TABLE tasks ADD COLUMN archived_at TIMESTAMPTZ")
     with engine.begin() as conn:
         for s in stmts:
             conn.execute(text(s))

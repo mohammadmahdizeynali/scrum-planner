@@ -208,7 +208,7 @@ def sprint_members_with_tasks(db: Session, sprint: Sprint):
     rows = (
         db.query(SprintMembership, Task)
         .join(Task, Task.id == SprintMembership.task_id)
-        .filter(SprintMembership.sprint_id == sprint.id)
+        .filter(SprintMembership.sprint_id == sprint.id, Task.archived_at.is_(None))
         .all()
     )
     if not rows:
@@ -368,7 +368,11 @@ def planning_suggestions(db: Session, user: User, sprint: Sprint) -> list[dict]:
     member_ids = set(
         db.scalars(select(SprintMembership.task_id).where(SprintMembership.sprint_id == sprint.id)).all()
     )
-    base_conds = [Task.user_id == user.id, Task.status != TaskStatus.closed.value]
+    base_conds = [
+        Task.user_id == user.id,
+        Task.status != TaskStatus.closed.value,
+        Task.archived_at.is_(None),
+    ]
     if member_ids:
         base_conds.append(Task.id.notin_(member_ids))
     rows = db.execute(_task_core_select().where(*base_conds)).all()

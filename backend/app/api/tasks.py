@@ -60,6 +60,7 @@ def list_tasks(
     tag_id: uuid.UUID | None = None,
     q: str | None = None,
     standalone: bool = False,
+    archived: bool = False,
     sprint_id: uuid.UUID | None = None,
     due_within_days: int | None = None,
     limit: int = Query(default=200, le=500),
@@ -69,6 +70,10 @@ def list_tasks(
     db: Session = Depends(get_db),
 ):
     conds = [Task.user_id == user.id]
+    if archived:
+        conds.append(Task.archived_at.isnot(None))
+    else:
+        conds.append(Task.archived_at.is_(None))
     if area_id is not None:
         conds.append(Task.area_id == area_id)
     if project_id is not None:
@@ -150,6 +155,55 @@ def create_task(body: TaskCreateIn, user: User = Depends(get_current_user), db: 
     return TaskOut(**{k: v for k, v in detail.items() if k in TaskOut.model_fields})
 
 
+def _retention_cutoff_utc(user: User):
+    from app.core.timeutils import jalali_month_start_utc_months_ago
+
+    return jalali_month_start_utc_months_ago(utcnow(), 3, user.timezone)
+
+
+@router.get("/tasks/retention")
+def retention_candidates(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Tasks closed before the start of (current Jalali month − 3) — nominated for
+    permanent deletion. Nothing is deleted without explicit confirmation."""
+    cutoff = _retention_cutoff_utc(user)
+    tasks = db.scalars(
+        select(Task).where(
+            Task.user_id == user.id,
+            Task.status == TaskStatus.closed.value,
+            Task.closed_at.isnot(None),
+            Task.closed_at < cutoff,
+        )
+    ).all()
+    out = []
+    for t in tasks:
+        logged = db.query(func.coalesce(func.sum(TimeEntry.minutes), 0)).filter(TimeEntry.task_id == t.id).scalar()
+        from app.core.timeutils import format_jalali_date, jalali_parts, jalali_month_label
+
+        closed_local = t.closed_at
+        month_label = None
+        if closed_local is not None:
+            from app.core.timeutils import get_tz
+
+            d = closed_local.astimezone(get_tz(user.timezone)).date()
+            jy, jm, _ = jalali_parts(d)
+            month_label = jalali_month_label(jy, jm)
+        out.append(
+            {
+                "id": t.id,
+                "title": t.title,
+                "issue_key": t.issue_key,
+                "archived": t.archived_at is not None,
+                "closed_month": month_label,
+                "logged_minutes": int(logged or 0),
+            }
+        )
+    out.sort(key=lambda x: x["closed_month"] or "")
+    from app.core.timeutils import format_jalali_date, jalali_parts, get_tz as _gtz
+
+    cutoff_local = cutoff.astimezone(_gtz(user.timezone)).date()
+    return {"cutoff_date": cutoff_local.isoformat(), "cutoff_label": format_jalali_date(cutoff_local), "candidates": out}
+
+
 @router.get("/tasks/{task_id}", response_model=TaskDetail)
 def get_task(task_id: uuid.UUID, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     task = db.get(Task, task_id)
@@ -224,6 +278,27 @@ def task_delete_preview(task_id: uuid.UUID, user: User = Depends(get_current_use
     if task is None or task.user_id != user.id:
         raise HTTPException(status_code=404, detail="تسک پیدا نشد.")
     return _task_delete_preview(db, user, task)
+
+
+@router.post("/tasks/{task_id}/archive")
+def archive_task(task_id: uuid.UUID, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    task = db.get(Task, task_id)
+    if task is None or task.user_id != user.id:
+        raise HTTPException(status_code=404, detail="تسک پیدا نشد.")
+    if task.archived_at is None:
+        task.archived_at = utcnow()
+        db.commit()
+    return {"ok": True}
+
+
+@router.post("/tasks/{task_id}/restore")
+def restore_task(task_id: uuid.UUID, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    task = db.get(Task, task_id)
+    if task is None or task.user_id != user.id:
+        raise HTTPException(status_code=404, detail="تسک پیدا نشد.")
+    task.archived_at = None
+    db.commit()
+    return {"ok": True}
 
 
 @router.delete("/tasks/{task_id}")

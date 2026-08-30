@@ -79,6 +79,17 @@ export default function TaskDetailDrawer({ taskId, onClose }: { taskId: string; 
     onError: (e) => toast.push((e as Error).message, "error"),
   });
 
+  const archiveTask = useMutation({
+    mutationFn: () => api(`/v1/tasks/${taskId}/archive`, { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["sprint"] });
+      toast.push("تسک بایگانی شد — از بخش آرشیو انبار قابل بازگردانی است.");
+      onClose();
+    },
+    onError: (e) => toast.push((e as Error).message, "error"),
+  });
+
   const deleteTask = useMutation({
     mutationFn: () => api(`/v1/tasks/${taskId}`, { method: "DELETE" }),
     onSuccess: () => {
@@ -561,7 +572,13 @@ export default function TaskDetailDrawer({ taskId, onClose }: { taskId: string; 
           </div>
         </div>
 
-        <div className="border-t border-slate-200 pt-3 dark:border-slate-800">
+        <div className="flex items-center justify-between border-t border-slate-200 pt-3 dark:border-slate-800">
+          <button
+            className="text-sm text-amber-600 hover:text-amber-700 dark:text-amber-400"
+            onClick={() => archiveTask.mutate()}
+          >
+            بایگانی تسک
+          </button>
           <button className="text-sm text-red-500 hover:text-red-600" onClick={openDelete}>
             حذف تسک
           </button>

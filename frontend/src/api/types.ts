@@ -222,6 +222,21 @@ export interface TrendData {
   weeks: TrendWeek[];
 }
 
+export interface RetentionCandidate {
+  id: string;
+  title: string;
+  issue_key: string | null;
+  archived: boolean;
+  closed_month: string | null;
+  logged_minutes: number;
+}
+
+export interface RetentionResponse {
+  cutoff_date: string;
+  cutoff_label: string;
+  candidates: RetentionCandidate[];
+}
+
 export interface TaskListResponse {
   items: Task[];
   total: number;

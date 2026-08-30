@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ListTodo, ListPlus, Plus, Search } from "lucide-react";
+import { Archive, ArchiveRestore, ArchiveX, ListTodo, ListPlus, Plus, Search } from "lucide-react";
 import { api } from "../../api/client";
-import type { Area, Project, Task, TaskListResponse } from "../../api/types";
+import type { Area, Project, RetentionResponse, Task, TaskListResponse } from "../../api/types";
 import {
   AreaChip,
   ConfirmDialog,
@@ -32,6 +32,7 @@ export default function AllTasksPage() {
     priority: params.get("priority") ?? "",
     tag_id: params.get("tag_id") ?? "",
     standalone: params.get("standalone") === "1",
+    archived: params.get("archived") === "1",
     due: params.get("due") === "1",
     sort: params.get("sort") ?? "updated",
   };
@@ -59,6 +60,7 @@ export default function AllTasksPage() {
           priority: filters.priority || undefined,
           tag_id: filters.tag_id || undefined,
           standalone: filters.standalone ? true : undefined,
+          archived: filters.archived ? true : undefined,
           due_within_days: filters.due ? 7 : undefined,
           sort: filters.sort,
           limit: 300,
@@ -88,6 +90,51 @@ export default function AllTasksPage() {
       toast.push("تسک حذف شد.");
     },
   });
+
+  const archiveTask = useMutation({
+    mutationFn: (t: Task) => api(`/v1/tasks/${t.id}/archive`, { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["sprint"] });
+      toast.push("تسک بایگانی شد — از بخش آرشیو قابل بازگردانی است.");
+    },
+    onError: (e) => toast.push((e as Error).message, "error"),
+  });
+
+  const restoreTask = useMutation({
+    mutationFn: (t: Task) => api(`/v1/tasks/${t.id}/restore`, { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      toast.push("تسک از آرشیو بازگردانده شد.");
+    },
+    onError: (e) => toast.push((e as Error).message, "error"),
+  });
+
+  const [retentionChecked, setRetentionChecked] = useState<Set<string>>(new Set());
+  const [purgeConfirm, setPurgeConfirm] = useState(false);
+  const { data: retention } = useQuery({
+    queryKey: ["retention"],
+    queryFn: () => api<RetentionResponse>("/v1/tasks/retention"),
+  });
+
+  const purge = useMutation({
+    mutationFn: (ids: string[]) => Promise.all(ids.map((id) => api(`/v1/tasks/${id}`, { method: "DELETE" }))),
+    onSuccess: (_d, ids) => {
+      qc.invalidateQueries({ queryKey: ["retention"] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      toast.push(`${ids.length} تسک برای همیشه حذف شد.`);
+      setRetentionChecked(new Set());
+    },
+    onError: (e) => toast.push((e as Error).message, "error"),
+  });
+
+  const toggleRetention = (id: string) =>
+    setRetentionChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const addToSprint = useMutation({
     mutationFn: (t: Task) =>
@@ -169,6 +216,13 @@ export default function AllTasksPage() {
         </button>
         <button
           type="button"
+          className={`chip cursor-pointer ${filters.archived ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"}`}
+          onClick={() => setFilter("archived", filters.archived ? "" : "1")}
+        >
+          آرشیو
+        </button>
+        <button
+          type="button"
           className={`chip cursor-pointer ${filters.due ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"}`}
           onClick={() => setFilter("due", filters.due ? "" : "1")}
         >
@@ -229,7 +283,7 @@ export default function AllTasksPage() {
                 {fmtDuration(t.logged_minutes)}
                 {t.estimate_minutes ? ` / ${fmtDuration(t.estimate_minutes)}` : ""}
               </span>
-              {!t.active_sprint_id && (
+              {!t.active_sprint_id && !filters.archived && (
                 <button
                   className="btn-ghost !p-1.5 text-slate-400 hover:!text-indigo-500"
                   title="افزودن به اسپرینت جاری"
@@ -239,6 +293,29 @@ export default function AllTasksPage() {
                   }}
                 >
                   <ListPlus size={16} />
+                </button>
+              )}
+              {filters.archived ? (
+                <button
+                  className="btn-ghost !p-1.5 text-slate-400 hover:!text-indigo-500"
+                  title="بازگردانی از آرشیو"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    restoreTask.mutate(t);
+                  }}
+                >
+                  <ArchiveRestore size={16} />
+                </button>
+              ) : (
+                <button
+                  className="btn-ghost !p-1.5 text-slate-400 hover:!text-indigo-500"
+                  title="بایگانی"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    archiveTask.mutate(t);
+                  }}
+                >
+                  <Archive size={16} />
                 </button>
               )}
               <button
@@ -255,6 +332,63 @@ export default function AllTasksPage() {
         </div>
       )}
 
+      <div className="card mt-4 p-4">
+        <h3 className="flex items-center gap-2 font-bold">
+          <ArchiveX size={17} className="text-amber-500" />
+          پاک‌سازی قدیمی‌ها
+        </h3>
+        <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+          تسک‌های بسته‌شده تا <b>{retention?.cutoff_label ?? "سه ماه پیش"}</b> (سه ماه پیش).
+          هیچ‌چیز خودکار حذف نمی‌شود — انتخاب کن و با تأیید، برای همیشه پاک کن (زمان‌های ثبت‌شده‌شان هم پاک می‌شود).
+        </p>
+        {retention && retention.candidates.length > 0 && (
+          <>
+            <div className="mt-2 space-y-1">
+              {retention.candidates.map((c) => (
+                <label
+                  key={c.id}
+                  className="flex cursor-pointer flex-wrap items-center gap-2 rounded-xl border border-slate-200 p-2.5 text-sm dark:border-slate-700"
+                >
+                  <input
+                    type="checkbox"
+                    checked={retentionChecked.has(c.id)}
+                    onChange={() => toggleRetention(c.id)}
+                    className="h-4 w-4 accent-red-500"
+                  />
+                  {c.issue_key && (
+                    <span className="chip tnum bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                      {c.issue_key}
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1 truncate font-medium">{c.title}</span>
+                  <span className="chip bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                    {c.closed_month}
+                  </span>
+                  {c.archived && (
+                    <span className="chip bg-slate-100 text-slate-400 dark:bg-slate-800">بایگانی</span>
+                  )}
+                  {c.logged_minutes > 0 && (
+                    <span className="tnum text-xs text-slate-400">{fmtDuration(c.logged_minutes)}</span>
+                  )}
+                </label>
+              ))}
+            </div>
+            <div className="mt-3 flex justify-end">
+              <button
+                className="btn-danger"
+                disabled={retentionChecked.size === 0 || purge.isPending}
+                onClick={() => setPurgeConfirm(true)}
+              >
+                حذف دائمی ({retentionChecked.size})
+              </button>
+            </div>
+          </>
+        )}
+        {retention && retention.candidates.length === 0 && (
+          <div className="mt-1 text-xs text-slate-400">هنوز تسکی برای پاک‌سازی نرسیده است.</div>
+        )}
+      </div>
+
       <CreateTaskModal open={createOpen} onClose={() => setCreateOpen(false)} areas={areas ?? []} projects={projects ?? []} />
       {detailTaskId && <TaskDetailDrawer taskId={detailTaskId} onClose={() => setDetailTaskId(null)} />}
       <ConfirmDialog
@@ -263,6 +397,14 @@ export default function AllTasksPage() {
         title="حذف تسک"
         message={`«${deleteTarget?.title}» برای همیشه حذف می‌شود (به همراه زمان‌های ثبت‌شده‌اش).`}
         onConfirm={() => deleteTarget && deleteTask.mutate(deleteTarget.id)}
+      />
+      <ConfirmDialog
+        open={purgeConfirm}
+        onClose={() => setPurgeConfirm(false)}
+        title="حذف دائمی قدیمی‌ها"
+        message={`${retentionChecked.size} تسک به‌همراه زمان‌های ثبت‌شده‌شان برای همیشه حذف می‌شوند. این کار برگشت‌پذیر نیست.`}
+        confirmLabel="حذف دائمی"
+        onConfirm={() => purge.mutate([...retentionChecked])}
       />
     </main>
   );

@@ -106,3 +106,51 @@ def test_delete_task_with_entries(auth_client, task):
     assert r.status_code == 200
     detail = auth_client.get(f"/api/v1/tasks/{task['id']}")
     assert detail.status_code == 404
+
+
+def test_archive_restore_and_hide(auth_client, area, project):
+    t = auth_client.post("/api/v1/tasks", json={"title": "archivable", "project_id": project["id"]}).json()
+    # non-archived list contains it
+    assert any(x["id"] == t["id"] for x in auth_client.get("/api/v1/tasks").json()["items"])
+
+    r = auth_client.post(f"/api/v1/tasks/{t['id']}/archive")
+    assert r.status_code == 200
+    # hidden from the default list, visible in the archive view
+    assert not any(x["id"] == t["id"] for x in auth_client.get("/api/v1/tasks").json()["items"])
+    r = auth_client.get("/api/v1/tasks", params={"archived": True}).json()
+    assert any(x["id"] == t["id"] for x in r["items"])
+
+    # restore brings it back
+    assert auth_client.post(f"/api/v1/tasks/{t['id']}/restore").status_code == 200
+    assert any(x["id"] == t["id"] for x in auth_client.get("/api/v1/tasks").json()["items"])
+
+
+def test_retention_candidates_jalali_cutoff(auth_client, area):
+    from datetime import datetime, timedelta, timezone
+
+    from app.core.timeutils import jalali_month_start_utc_months_ago
+
+    cutoff = jalali_month_start_utc_months_ago(datetime.now(timezone.utc), 3, "Asia/Tehran")
+
+    # old closed task: closed 5 days BEFORE the cutoff
+    t_old = auth_client.post("/api/v1/tasks", json={"title": "old", "area_id": area["id"]}).json()
+    old_closed = cutoff - timedelta(days=5)
+    auth_client.patch(f"/api/v1/tasks/{t_old['id']}", json={"status": "closed"})
+    # force closed_at behind the cutoff (API sets it to now)
+    from app.db import SessionLocal
+    from sqlalchemy import text
+
+    db = SessionLocal()
+    db.execute(text("UPDATE tasks SET closed_at = :c WHERE id = :i"), {"c": old_closed, "i": t_old["id"]})
+    db.commit()
+
+    # recent closed task: closed today
+    t_new = auth_client.post("/api/v1/tasks", json={"title": "recent", "area_id": area["id"]}).json()
+    auth_client.patch(f"/api/v1/tasks/{t_new['id']}", json={"status": "closed"})
+
+    r = auth_client.get("/api/v1/tasks/retention").json()
+    ids = [c["id"] for c in r["candidates"]]
+    assert t_old["id"] in ids
+    assert t_new["id"] not in ids
+    assert any(c["closed_month"] for c in r["candidates"] if c["id"] == t_old["id"])
+    db.close()

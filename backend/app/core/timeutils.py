@@ -129,3 +129,18 @@ def jalali_month_length(jy: int, jm: int) -> int:
 
 def jalali_month_label(jy: int, jm: int) -> str:
     return f"{JALALI_MONTHS[jm - 1]} {fa_digits(jy)}"
+
+
+def jalali_month_start_utc_months_ago(now_utc: datetime, months: int, tz_name: str | None) -> datetime:
+    """Start (00:00 local) of the Jalali month `months` before the current one —
+    e.g. months=3 in Shahrivar → 1 Khordad 00:00. Used as the archive-retention cutoff."""
+    tz = get_tz(tz_name)
+    local_date = to_utc(now_utc).astimezone(tz).date()
+    jy, jm, _ = jalali_parts(local_date)
+    m = jm - months
+    y = jy
+    while m <= 0:
+        m += 12
+        y -= 1
+    g = jdatetime.date(y, m, 1).togregorian()
+    return datetime.combine(g, time(0, 0), tzinfo=tz).astimezone(timezone.utc)

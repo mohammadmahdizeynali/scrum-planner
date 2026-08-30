@@ -140,6 +140,7 @@ class Task(Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     due_date: Mapped[date | None] = mapped_column(Date)
     issue_key: Mapped[str | None] = mapped_column(String(24), unique=True)  # e.g. "SBU-001" (immutable)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # soft-hide; data kept
     recurrence_rule: Mapped[dict | None] = mapped_column(JSON)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
