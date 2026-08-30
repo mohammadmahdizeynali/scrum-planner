@@ -11,6 +11,7 @@ import {
   Boxes,
   Search,
   Settings,
+  Shield,
   Sun,
 } from "lucide-react";
 import { api } from "../api/client";
@@ -24,6 +25,9 @@ const NAV = [
   { to: "/tasks", label: "انبار", icon: ListTodo },
   { to: "/areas", label: "مسیرها", icon: Boxes },
 ];
+
+// Admin-only entry, appended when the logged-in user is the admin.
+const ADMIN_NAV = { to: "/admin", label: "مدیریت", icon: Shield };
 
 export function useMe() {
   return useQuery({
@@ -45,6 +49,7 @@ export default function AppShell() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const nav = me?.role === "admin" ? [...NAV, ADMIN_NAV] : NAV;
 
   useEffect(() => {
     if (me) applyTheme(me.theme);
@@ -98,7 +103,7 @@ export default function AppShell() {
         </form>
 
         <nav className="flex flex-1 flex-col gap-1">
-          {NAV.map((item) => (
+          {nav.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -150,7 +155,7 @@ export default function AppShell() {
           className="fixed inset-x-0 bottom-0 z-40 flex border-t border-slate-200/80 bg-white/90 backdrop-blur-lg dark:border-slate-800 dark:bg-slate-900/90 md:hidden"
           style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         >
-          {NAV.map((item) => (
+          {nav.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

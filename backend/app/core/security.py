@@ -100,3 +100,11 @@ def destroy_session(db: Session, token: str) -> None:
     if row:
         db.delete(row)
         db.commit()
+
+def revoke_user_sessions(db: Session, user_id) -> None:
+    """Drop every session of a user (password reset / deactivation / account removal)."""
+    from app.models import Session as SessionRow
+
+    for row in db.scalars(select(SessionRow).where(SessionRow.user_id == user_id)).all():
+        db.delete(row)
+    db.commit()

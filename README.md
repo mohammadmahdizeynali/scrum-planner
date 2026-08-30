@@ -5,7 +5,10 @@ A lightweight, personal "mini-Jira" for organizing life into **areas → project
 reports**. Fully **Persian, RTL, and Jalali-calendar** based. Runs on any VPS via Docker Compose,
 is used from desktop and mobile browsers, and installs as a PWA.
 
-- Single user today (username + password, session auth), multi-user-ready data model
+- Multi-user with strict privacy: the admin creates accounts in **مدیریت**; every user gets a
+  completely separate workspace (areas, tasks, sprints, logs) that nobody else — not even the
+  admin — can see. Accounts can be deactivated (login blocked, sessions revoked) or deleted
+  (their data goes with them); there is exactly one admin, the seeded owner
 - No live timer — you log time after the fact by dragging ranges on a week grid (شنبه → جمعه)
 - Weekly sprints with a proper close ritual: carry over / send back to backlog / close, and an
   archived weekly report
@@ -37,7 +40,8 @@ is used from desktop and mobile browsers, and installs as a PWA.
 
 Screens: **اسپرینت** (current sprint board) · **تایم‌شیت** (weekly logging calendar) ·
 **گزارش‌ها** (monthly + archived weekly) · **انبار** (global backlog list) ·
-**مسیرها** (areas & projects) · **تنظیمات** (profile, timezone, theme, password, backups).
+**مسیرها** (areas & projects) · **تنظیمات** (profile, timezone, theme, password, backups) ·
+**مدیریت** (admin-only: create, edit, deactivate, delete users).
 
 ---
 

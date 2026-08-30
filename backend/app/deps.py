@@ -16,3 +16,9 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
         raise HTTPException(status_code=401, detail="نشست شما منقضی شده است.")
     _session, user = resolved
     return user
+
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="این بخش فقط برای مدیر سیستم است.")
+    return user

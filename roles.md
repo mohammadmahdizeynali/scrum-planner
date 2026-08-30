@@ -2,27 +2,25 @@
 
 > Agent working notes — internal reference, not user-facing product documentation.
 
-## Current reality
+## Current reality (multi-user, live)
 
-Exactly one user: the owner. Login required (agreed). Role: `admin`. The admin is the only
-role that exists in the UI initially — there is no user management screen in phase 1.
+The owner is the only `admin`; they create `member` accounts in the **مدیریت** screen
+(admin-only nav + `/admin` route, backend `require_admin`). Exactly one admin can ever exist —
+the create API always yields `member` and cannot be given a role. Accounts can be edited
+(display name, timezone), deactivated (`is_active=false`: login refused, sessions revoked,
+data kept), have their password reset by the admin (sessions revoked), or deleted (whole
+workspace cascades away; self-delete and admin-delete are blocked).
 
-## Multi-user readiness (designed in, not built out)
+**Access model (decided with the owner, 2026-08-30):** admin manages **accounts only** — no
+impersonation, no read access to other users' areas/tasks/sprints/logs. Each user's workspace
+is fully private. Sharing/collaboration remains out of scope (see below).
 
-The owner explicitly wants login + multi-user in mind from the start. What we do NOW vs LATER:
+## What replaced the old "Later" list
 
-**Now (cheap, non-breaking):**
-- `users` table with `role` (admin | member) — admin is the owner.
-- Every owned row carries `user_id`; all queries filter by the session user. This is the
-  real multi-user preparation: strict ownership scoping from day one, no "global data" paths.
-- Sessions table with expiry — revocation works per-user.
-- Seeding: first boot creates admin from env if no user exists.
-
-**Later (explicitly deferred — do not build):**
-- Member invitations, user management screens, password reset flows.
-- Sharing/collaboration. NOTE: sharing is NOT just flipping a role — it needs a workspace or
-  sharing-target concept (share an area? a project? read vs write?). When the owner asks for
-  a second user, revisit this file FIRST and decide the sharing model with them.
+- ✅ Built: user management screen, admin password reset, account activation toggle.
+- Still deferred: member invitations, sharing/collaboration. NOTE: sharing is NOT just
+  flipping a role — it needs a workspace or sharing-target concept (share an area? a project?
+  read vs write?). Revisit this file FIRST and decide the sharing model with the owner.
 
 ## Future permission sketch (placeholder, not a spec)
 

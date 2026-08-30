@@ -10,7 +10,9 @@
 - FR-1.3 One admin user seeded at first start (from env credentials); password stored with
   argon2id. Login endpoint rate-limited.
 - FR-1.4 Profile settings: display name, timezone (default `Asia/Tehran`), theme (light/dark/system).
-- FR-1.5 Users/roles exist in the schema from day one (see `roles.md`) even though only one user exists.
+- FR-1.5 Users/roles exist in the schema from day one (see `roles.md`); admin manages member
+  accounts (create / edit / deactivate / delete / password reset) in **مدیریت** — accounts only,
+  never their data.
 
 ## FR-2 Areas (Big Projects)
 

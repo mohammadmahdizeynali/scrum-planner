@@ -23,6 +23,10 @@ def ensure_schema_upgrades() -> None:
     insp = inspect(engine)
     tables = set(insp.get_table_names())
     stmts: list[str] = []
+    if "users" in tables:
+        cols = {c["name"] for c in insp.get_columns("users")}
+        if "is_active" not in cols:
+            stmts.append("ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE")
     if "areas" in tables:
         cols = {c["name"] for c in insp.get_columns("areas")}
         if "key_prefix" not in cols:

@@ -155,3 +155,4 @@
 5. Anything you want visible on the Sprint page that's not listed (sprint goal field? none for now?)?
 
 | D83 | Pace indicator removed at the owner's request: the timesheet reverted to its pre-pace state (green daily-target line, week-sprint query, and the sprint-list `estimate_minutes` payload all reverted). The sticky-header alignment fix (D81) is kept. | agreed (owner request) |
+| D84 | Multi-user goes live: admin creates member accounts in a dedicated **مدیریت** screen. Admin manages **accounts only** — zero access to other users' workspaces (private model confirmed). Exactly one admin, ever (create API always yields `member`); guards: no self-delete/self-deactivate, admin rows not editable/deletable, password reset & deactivation revoke sessions, delete cascades the user's whole workspace. `users.is_active` added (login guard + auto-migration on boot). | agreed (owner answers: accounts-only, exactly one admin) |

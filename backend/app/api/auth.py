@@ -27,6 +27,8 @@ def login(body: LoginIn, request: Request, response: Response, db: Session = Dep
     user = db.scalar(select(User).where(User.username == username))
     if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="نام کاربری یا رمز عبور اشتباه است.")
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="حساب شما غیرفعال شده است؛ با مدیر سیستم تماس بگیرید.")
     token = create_session(db, user.id)
     response.set_cookie(
         key=settings.session_cookie_name,

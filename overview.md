@@ -10,8 +10,8 @@ monthly reports. Built for exactly one daily user now, with multi-user support d
 
 ## Who uses it
 
-- **Now:** a single user (the owner), via password login.
-- **Later (designed for, not built yet):** a small number of additional users.
+- **Now:** the owner (admin) plus any members they create in **مدیریت**; everyone logs in with
+  username + password and gets a fully private workspace.
 - All interaction happens **through the web UI**. The user never touches files, configs, or
   Markdown as part of using the app.
 

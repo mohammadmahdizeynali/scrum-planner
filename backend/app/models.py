@@ -66,6 +66,7 @@ class User(Base):
     timezone: Mapped[str] = mapped_column(String(64), default="Asia/Tehran")
     theme: Mapped[str] = mapped_column(String(16), default="system")  # light|dark|system
     role: Mapped[str] = mapped_column(String(16), default=UserRole.admin.value)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)  # False → login blocked, sessions revoked
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

@@ -23,6 +23,7 @@ class UserOut(ORMModel):
     timezone: str
     theme: str
     role: str
+    is_active: bool = True
 
 
 class UserUpdateIn(BaseModel):
@@ -34,6 +35,32 @@ class UserUpdateIn(BaseModel):
 class PasswordChangeIn(BaseModel):
     current_password: str
     new_password: str = Field(min_length=8)
+
+
+# ---------- admin: user management ----------
+
+class UserAdminCreateIn(BaseModel):
+    username: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=8, max_length=128)
+    display_name: str = Field(default="", max_length=128)
+    timezone: str = "Asia/Tehran"
+
+
+class UserAdminUpdateIn(BaseModel):
+    display_name: str | None = Field(default=None, max_length=128)
+    timezone: str | None = None
+    is_active: bool | None = None
+    new_password: str | None = Field(default=None, min_length=8, max_length=128)
+
+
+class UserAdminOut(ORMModel):
+    id: uuid.UUID
+    username: str
+    display_name: str
+    timezone: str
+    role: str
+    is_active: bool
+    created_at: datetime
 
 
 # ---------- areas / projects ----------

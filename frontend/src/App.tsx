@@ -8,6 +8,7 @@ import ReportsPage from "./features/reports/ReportsPage";
 import AllTasksPage from "./features/tasks/AllTasksPage";
 import AreasPage from "./features/areas/AreasPage";
 import SettingsPage from "./features/settings/SettingsPage";
+import AdminPage from "./features/admin/AdminPage";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { data, isLoading, error } = useMe();
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="/tasks" element={<AllTasksPage />} />
         <Route path="/areas" element={<AreasPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/admin" element={<AdminPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -5,6 +5,17 @@ export interface User {
   timezone: string;
   theme: "light" | "dark" | "system";
   role: string;
+  is_active: boolean;
+}
+
+export interface AdminUser {
+  id: string;
+  username: string;
+  display_name: string;
+  timezone: string;
+  role: "admin" | "member";
+  is_active: boolean;
+  created_at: string;
 }
 
 export interface Tag {
