@@ -135,6 +135,12 @@
 
 ## Hard-won lessons (build/deploy phase)
 
+- **Scrollable grid + outside header = alignment trap**: a day-header row placed *above* an
+  `overflow-y-auto` grid misaligns by the vertical scrollbar width once the grid overflows
+  (classic "today highlight offset" the owner caught). Fix: move the header INSIDE the scroll
+  container as `sticky top-0` with an opaque background, and add the header height to any
+  programmatic `scrollTop`. Column alignment is then exact in every browser.
+
 - `python:3.12-slim` is now **Debian trixie** — a `bookworm-pgdg` apt line breaks (libpq
   conflict). Use `trixie-pgdg`.
 - **pg_dump client major must be ≤ server major**: client 18 dumps fine but the SQL contains

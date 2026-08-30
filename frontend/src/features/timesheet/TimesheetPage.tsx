@@ -167,6 +167,7 @@ export default function TimesheetPage() {
   const colRefs = useRef<(HTMLDivElement | null)[]>([]);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const dayHeaderRef = useRef<HTMLDivElement | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
   dragRef.current = drag;
@@ -187,9 +188,10 @@ export default function TimesheetPage() {
   useEffect(() => {
     if (didAutoScroll.current || !days.length) return;
     didAutoScroll.current = true;
+    const headerH = dayHeaderRef.current?.offsetHeight ?? 0;
     const target =
       todayIndex >= 0 ? Math.max(0, ((nowMin - 150) / 60) * HOUR_PX) : 7 * HOUR_PX;
-    if (scrollRef.current) scrollRef.current.scrollTop = Math.min(target, GRID_HEIGHT - 400);
+    if (scrollRef.current) scrollRef.current.scrollTop = Math.min(target + headerH, GRID_HEIGHT);
   }, [days.length, todayIndex, nowMin]);
 
   const beginPointer = (e: React.PointerEvent, mode: DragState["mode"], entry?: PlacedEntry) => {
@@ -404,37 +406,42 @@ export default function TimesheetPage() {
 
       {/* ===== Desktop week grid ===== */}
       <div className="mx-auto hidden max-w-[1700px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 md:flex">
-        {/* day headers */}
-        <div className="grid border-b border-slate-200 dark:border-slate-800" style={{ gridTemplateColumns: "64px repeat(7, minmax(0,1fr))" }}>
-          <div />
-          {days.map((d, i) => (
-            <div
-              key={d.iso}
-              className={`px-2 py-2.5 text-center ${i === todayIndex ? "bg-indigo-50/80 dark:bg-indigo-500/10" : ""}`}
-            >
-              <div className={`text-[13px] font-bold ${i === todayIndex ? "text-indigo-600 dark:text-indigo-300" : "text-slate-600 dark:text-slate-300"}`}>
-                {WEEKDAYS_FA[i]}
-                {i === todayIndex && <span className="chip ms-1 bg-indigo-600 !px-1.5 !py-0 text-[10px] text-white">امروز</span>}
+        <div ref={scrollRef} className="max-h-[calc(100vh-235px)] min-h-[520px] overflow-y-auto [scrollbar-gutter:stable]">
+          {/* day headers — sticky INSIDE the scroll container so the highlight
+              always aligns with the columns (scrollbar width included) */}
+          <div
+            ref={dayHeaderRef}
+            className="sticky top-0 z-40 grid border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
+            style={{ gridTemplateColumns: "64px repeat(7, minmax(0,1fr))" }}
+          >
+            <div className="bg-white dark:bg-slate-900" />
+            {days.map((d, i) => (
+              <div
+                key={d.iso}
+                className={`px-2 py-2.5 text-center ${i === todayIndex ? "bg-indigo-50/80 dark:bg-indigo-500/10" : ""}`}
+              >
+                <div className={`text-[13px] font-bold ${i === todayIndex ? "text-indigo-600 dark:text-indigo-300" : "text-slate-600 dark:text-slate-300"}`}>
+                  {WEEKDAYS_FA[i]}
+                  {i === todayIndex && <span className="chip ms-1 bg-indigo-600 !px-1.5 !py-0 text-[10px] text-white">امروز</span>}
+                </div>
+                <div className="mt-0.5 text-[11px] text-slate-400">{faDate(d.parts, { withYear: false })}</div>
+                <div className="mt-1 flex items-center justify-center gap-1">
+                  <span
+                    className={`tnum rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                      dayTotals[i] > 1440
+                        ? "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300"
+                        : dayTotals[i] > 0
+                          ? "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                          : "text-slate-300 dark:text-slate-600"
+                    }`}
+                  >
+                    {dayTotals[i] > 1440 && <AlertTriangle size={10} className="me-0.5 inline" />}
+                    {fmtDuration(dayTotals[i])}
+                  </span>
+                </div>
               </div>
-              <div className="mt-0.5 text-[11px] text-slate-400">{faDate(d.parts, { withYear: false })}</div>
-              <div className="mt-1 flex items-center justify-center gap-1">
-                <span
-                  className={`tnum rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                    dayTotals[i] > 1440
-                      ? "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300"
-                      : dayTotals[i] > 0
-                        ? "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                        : "text-slate-300 dark:text-slate-600"
-                  }`}
-                >
-                  {dayTotals[i] > 1440 && <AlertTriangle size={10} className="me-0.5 inline" />}
-                  {fmtDuration(dayTotals[i])}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div ref={scrollRef} className="max-h-[calc(100vh-235px)] min-h-[520px] overflow-y-auto">
+            ))}
+          </div>
           <div ref={gridRef} className="relative" style={{ height: GRID_HEIGHT }}>
             {/* hour + half-hour guide lines */}
             {Array.from({ length: 24 }, (_, h) => (

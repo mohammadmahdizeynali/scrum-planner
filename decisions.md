@@ -142,6 +142,8 @@
 | D77 | Reports trends: `GET /reports/trends?weeks=8` computes the last N sprint-weeks LIVE (per-area stacked bars + estimate dashed marker per week + delta chips for past weeks only + accuracy verdict comparing avg |logged−estimate| of the older vs newer half). Pure CSS bars — still no chart library. | implemented (owner priority) |
 | D78 | Archive: tasks get an `archived_at` state (orthogonal to status). Archived tasks hide from lists/boards/suggestions/briefings but their time entries remain in all reports. انبار page: «آرشیو» filter + restore/permanent-delete per row; drawer gets a بایگانی action. | agreed (owner request) |
 | D79 | Retention: a انبار bottom section lists CLOSED tasks with `closed_at` before the start of (current Jalali month − 3) — e.g. in Shahrivar, Ordibehesht-and-older. Permanent deletion only behind explicit checkbox+confirmation; nothing auto-deletes, everything newer stays. | agreed (owner request) |
+| D80 | Weekly pace indicator: the timesheet draws a dashed emerald line per day at (sprint estimate ÷ 7) — "if you're on pace, you'd be here by now" — on both desktop grid and mobile timeline; hidden when the sprint has no estimate; hinted in the footer text. | agreed (owner request) |
+| D81 | Timesheet day-header row moved INSIDE the scroll container as a sticky bar — a header above a scrollable grid misaligns by the scrollbar width (classic today-highlight offset). Both now share one width context. | fix (owner report) |
 
 ## Open questions for the owner (doc review)
 

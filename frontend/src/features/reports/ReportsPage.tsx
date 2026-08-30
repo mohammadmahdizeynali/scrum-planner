@@ -535,11 +535,14 @@ function TrendCharts({ tz }: { tz: string }) {
   const weeks = data?.weeks ?? [];
   if (weeks.length === 0) return null;
 
+  const chartH = 150;
+  const barW = 26;
+  const ghostW = 34;
   const maxVal = Math.max(
     ...weeks.map((w) => Math.max(w.total_minutes, w.estimate_minutes)),
     1
   );
-  const chartH = 140;
+  const px = (minutes: number) => (minutes / maxVal) * (chartH - 8);
 
   const legend: { key: string; name: string; color: string }[] = [];
   const seen = new Set<string>();
@@ -551,6 +554,7 @@ function TrendCharts({ tz }: { tz: string }) {
         legend.push({ key: k, name: a.name, color: a.color });
       }
     }
+  const anyOverrun = weeks.some((w) => w.total_minutes > w.estimate_minutes);
 
   // estimate-accuracy verdict: compare avg |logged - estimate| of the older
   // half vs the newer half (only weeks with an estimate).
@@ -568,27 +572,32 @@ function TrendCharts({ tz }: { tz: string }) {
 
   return (
     <div className="card p-5">
-      <h3 className="mb-1 font-bold">روند ۸ هفتهٔ اخیر</h3>
-      <p className="mb-4 text-xs text-slate-400">
-        میله‌ها = ساعات ثبت‌شده هر هفته (رنگ‌ها = حوزه‌ها) · خط‌چین = برآورد همان هفته
-      </p>
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <div className="mb-1 flex items-center justify-between">
+        <h3 className="font-bold">روند ۸ هفتهٔ اخیر</h3>
+        <span className="text-[11px] text-slate-400">ثبت‌شده در برابر برآورد هر هفته</span>
+      </div>
+
+      <div className="flex gap-1 overflow-x-auto pb-1">
         {weeks.map((w) => {
           const startParts = utcToZonedParts(new Date(w.start_at), tz);
+          const isPast = new Date(w.end_at).getTime() < Date.now();
           const delta = w.total_minutes - w.estimate_minutes;
+          const overrun = Math.max(0, w.total_minutes - w.estimate_minutes);
+          const barHpx = w.total_minutes > 0 ? px(w.total_minutes) : 0;
+          const overflowHpx = overrun > 0 ? (overrun / w.total_minutes) * barHpx : 0;
           return (
-            <div key={w.sprint_id} className="flex min-w-[52px] flex-1 flex-col items-center gap-1">
-              <div className="relative flex w-full items-end justify-center" style={{ height: chartH }}>
+            <div key={w.sprint_id} className="flex min-w-[64px] flex-1 flex-col items-center gap-1 rounded-xl px-1 py-1 hover:bg-slate-50 dark:hover:bg-slate-800/40">
+              <div className="relative flex w-full items-end justify-center gap-0.5" style={{ height: chartH }}>
                 {w.estimate_minutes > 0 && (
                   <div
-                    className="absolute inset-x-0 z-10 border-t-2 border-dashed border-slate-400/80"
-                    style={{ bottom: `${(w.estimate_minutes / maxVal) * chartH}px` }}
+                    className="absolute bottom-0 rounded-t-md bg-slate-200/90 dark:bg-slate-700/80"
+                    style={{ width: ghostW, height: px(w.estimate_minutes) }}
                     title={`برآورد: ${fmtDuration(w.estimate_minutes)}`}
                   />
                 )}
                 <div
-                  className="flex w-7 flex-col-reverse overflow-hidden rounded-t-md"
-                  style={{ height: `${(w.total_minutes / maxVal) * chartH}px` }}
+                  className="relative z-10 flex flex-col-reverse justify-end overflow-hidden rounded-t-md border border-white/60 shadow-sm dark:border-slate-900/60"
+                  style={{ width: barW, height: barHpx }}
                   title={`ثبت‌شده: ${fmtDuration(w.total_minutes)}`}
                 >
                   {w.areas.map((a) => (
@@ -600,13 +609,16 @@ function TrendCharts({ tz }: { tz: string }) {
                       }}
                     />
                   ))}
+                  {overflowHpx > 0 && <div className="w-full shrink-0 bg-red-500/85" style={{ height: overflowHpx }} />}
                 </div>
+                {!w.areas.length && w.total_minutes === 0 && (
+                  <span className="absolute bottom-1 text-[10px] text-slate-300 dark:text-slate-600">—</span>
+                )}
               </div>
-              <span className="tnum text-[10px] text-slate-500 dark:text-slate-400">
+              <span className="tnum text-[11px] font-semibold text-slate-600 dark:text-slate-300">
                 {w.total_minutes > 0 ? fmtDuration(w.total_minutes) : "—"}
               </span>
-              <span className="text-[10px] text-slate-400">{faDate({ y: startParts.y, m: startParts.m, d: startParts.d }, { withYear: false })}</span>
-              {w.estimate_minutes > 0 && delta !== 0 && new Date(w.end_at).getTime() < Date.now() ? (
+              {w.estimate_minutes > 0 && isPast && delta !== 0 ? (
                 <span className={`tnum text-[10px] font-semibold ${delta > 0 ? "text-red-500" : "text-emerald-500"}`}>
                   {delta > 0 ? "+" : "−"}
                   {fmtDuration(Math.abs(delta))}
@@ -614,22 +626,33 @@ function TrendCharts({ tz }: { tz: string }) {
               ) : (
                 <span className="text-[10px]"> </span>
               )}
+              <span className="text-[10px] leading-3 text-slate-400">
+                {faDate({ y: startParts.y, m: startParts.m, d: startParts.d }, { withYear: false })}
+              </span>
             </div>
           );
         })}
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-2 text-[11px] dark:border-slate-800">
         {legend.map((l) => (
           <span key={l.key} className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
             <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: l.color }} />
             {l.name}
           </span>
         ))}
-        <span className="flex items-center gap-1 text-slate-400">
-          <span className="inline-block w-4 border-t-2 border-dashed border-slate-400" />
+        <span className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
+          <span className="h-2.5 w-3.5 rounded-sm bg-slate-200 dark:bg-slate-700" />
           برآورد
         </span>
+        {anyOverrun && (
+          <span className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
+            <span className="h-2.5 w-3.5 rounded-sm bg-red-500/85" />
+            اضافه‌کاری
+          </span>
+        )}
       </div>
+
       {verdict && (
         <div className="mt-3 rounded-xl bg-indigo-50 px-3 py-2 text-xs text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">
           {verdict}
