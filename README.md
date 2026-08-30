@@ -13,6 +13,19 @@ is used from desktop and mobile browsers, and installs as a PWA.
   donut charts
 - Built-in backups: a self-restoring ZIP (database + config + restore script) every Saturday
   02:00 + a one-click manual backup — delivered to Telegram and/or a private GitHub repo
+- **Jira-style issue keys**: each area defines a Latin prefix (e.g. `SBU`); tasks get
+  `SBU-001`, `SBU-002` … — immutable identity, searchable everywhere (even sloppy input like
+  `sbu-2`), and existing tasks are retro-keyed when a prefix is set
+- **Planning assistant**: reason-tagged suggestions (overdue / due this week / logged last
+  week / recurring) in a dismissable panel on empty sprints — confirm adds them via the normal
+  flow; recurring tasks are auto-injected into every new sprint
+- **Archive & retention**: tasks can be archived (hidden from boards/lists, history kept);
+  the انبار page nominates tasks closed 3+ Jalali months ago for optional, confirmed
+  permanent deletion — nothing auto-deletes
+- **Trend charts**: 8-week per-area stacked bars vs estimate columns with overrun caps,
+  per-week deltas, and an estimate-accuracy verdict — plus the project-share donut
+- **Daily Telegram digests**: morning sprint briefing with deadline reminders (06:00) and an
+  evening summary of logged time (23:00) — see the setup guide below
 
 | Layer | Choice |
 | --- | --- |
@@ -23,7 +36,7 @@ is used from desktop and mobile browsers, and installs as a PWA.
 | PWA | vite-plugin-pwa (manifest fa/rtl + service worker) |
 
 Screens: **اسپرینت** (current sprint board) · **تایم‌شیت** (weekly logging calendar) ·
-**گزارش‌ها** (monthly + archived weekly) · **همه تسک‌ها** (global backlog list) ·
+**گزارش‌ها** (monthly + archived weekly) · **انبار** (global backlog list) ·
 **مسیرها** (areas & projects) · **تنظیمات** (profile, timezone, theme, password, backups).
 
 ---
@@ -64,6 +77,7 @@ nano .env
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | your login — seeded on first boot only. **Change the password in Settings after first login.** |
 | `BACKUP_TELEGRAM_BOT_TOKEN` / `BACKUP_TELEGRAM_CHAT_ID` | optional — activates Telegram delivery of backup ZIPs (needs a server that can reach api.telegram.org). |
 | `BACKUP_GITHUB_REPO` / `BACKUP_GITHUB_TOKEN` | optional — activates GitHub delivery. **Must be a PRIVATE repo** (the ZIP contains your `.env`!). Token: fine-grained, *Contents: Read & Write*, limited to that repo. |
+| `NOTIFY_MORNING_HOUR` / `NOTIFY_EVENING_HOUR` | optional — local hours for the daily Telegram briefing and evening summary (defaults **6** and **23**). |
 
 ### 4. Start
 
@@ -134,21 +148,57 @@ schema, loads the dump, and brings the whole stack up. Verified end-to-end (12 t
 
 ---
 
-## Daily Telegram digests
+## Telegram bot setup (backups + daily digests)
 
-The backend also runs a daily notification loop over the same Telegram bot:
+One bot powers both the backup ZIP delivery and the daily digests. Everything below is
+**already implemented** — this is only how to turn it on.
 
-- **Morning briefing** (default **06:00** local): tasks currently in the sprint grouped by
-  status, with issue key, estimate vs logged per task, plus a **مهلت‌ها** section listing
-  overdue / due-today / due-tomorrow tasks (deadline reminders).
-- **Evening summary** (default **23:00** local): total time logged that day, per-task
-  breakdown, and tasks closed today.
+### 1. Create the bot
+1. In Telegram, open **@BotFather** → `/newbot` → choose a display name and a username
+   (e.g. `my_planner_bot`).
+2. BotFather replies with an **HTTP API token** like `123456789:AA...` — copy it.
 
-Hours are tunable via `NOTIFY_MORNING_HOUR` / `NOTIFY_EVENING_HOUR`; delivery reuses
-`BACKUP_TELEGRAM_BOT_TOKEN` / `BACKUP_TELEGRAM_CHAT_ID` (needs a server that can reach
-api.telegram.org). Missed slots (server was down) are skipped rather than sent stale. To check
-the exact message text without waiting: `GET /api/v1/notify/preview?type=morning|evening`
-(admin session).
+### 2. Get your chat ID
+1. Open your new bot in Telegram and press **Start** (the bot can only message you after
+   that).
+2. Message **@userinfobot** — it replies with your numeric **chat ID** (e.g. `123456789`).
+
+### 3. Configure `.env`
+```bash
+BACKUP_TELEGRAM_BOT_TOKEN=123456789:AA...
+BACKUP_TELEGRAM_CHAT_ID=123456789
+# optional — digest hours (local to the admin user's timezone):
+NOTIFY_MORNING_HOUR=6
+NOTIFY_EVENING_HOUR=23
+```
+Then `docker compose up -d` to apply. Each channel activates only when both of its values
+are set; with no Telegram configured the app runs normally and simply skips delivery.
+
+### 4. What you receive
+| When | Message |
+| --- | --- |
+| **Saturday 02:00** | Backup ZIP (database + `.env` + compose files + restore script) |
+| **Daily 06:00** | Morning briefing: sprint tasks by status with issue keys, estimates vs logged, plus مهلت‌ها (overdue / today / tomorrow) |
+| **Daily 23:00** | Evening summary: time logged today per task, tasks closed today |
+
+Missed slots (server was down) are skipped, never sent stale. Long messages are split
+automatically to respect Telegram's 4096-char limit.
+
+### 5. Verify without waiting
+As the admin, call the preview endpoint to see the exact message text (no send):
+
+```bash
+curl -s -b "planner_session=<your-session-cookie>" \
+  "http://<server>/api/v1/notify/preview?type=morning"
+```
+
+(or open it in the browser while logged in). The Settings → پشتیبان‌گیری card also shows
+whether each channel is active.
+
+> **Network note:** `api.telegram.org` must be reachable from the server. It is blocked from
+> some networks (including Iranian VPSes) — on such servers the digests and Telegram backup
+> delivery are silently skipped; the GitHub backup channel and the in-app backup download
+> still work. Deploy on a server with normal international access for Telegram features.
 
 ## Architecture
 
