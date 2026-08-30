@@ -8,16 +8,17 @@ import DateObjectCtor from "react-date-object";
 import { Trash2, X, Plus } from "lucide-react";
 import { api } from "../../api/client";
 import type { Area, Project, TaskDetail } from "../../api/types";
-import { ConfirmDialog, Field, PriorityBadge, Spinner, Toggle, useToast } from "../../components/ui";
+import { ConfirmDialog, DurationInput, Field, PriorityBadge, ProgressBar, Spinner, Toggle, useToast } from "../../components/ui";
 import {
   faDate,
   fmtDuration,
   fmtEstimateLogged,
+  minutesOfClock,
+  toFa,
   PRIORITY_FA,
   STATUS_FA,
   gregorianYMD,
 } from "../../lib/format";
-import { DurationInput } from "../../components/ui";
 import { utcToZonedParts } from "../../lib/tz";
 
 function useMeTz(): string {
@@ -61,6 +62,12 @@ export default function TaskDetailDrawer({ taskId, onClose }: { taskId: string; 
       setQuickLog((q) => ({ ...q, billable: task.area_billable_default ?? false }));
     }
   }, [task?.id, task?.area_billable_default]);
+
+  // live duration for the quick-log form ("09:00" → "10:30" = 1h 30 min)
+  const startMinQ = minutesOfClock(quickLog.start);
+  const endMinQ = minutesOfClock(quickLog.end);
+  const validRange = endMinQ > startMinQ;
+  const durLabel = validRange ? fmtDuration(endMinQ - startMinQ) : "—";
 
   const patch = useMutation({
     mutationFn: (body: Record<string, unknown>) => api(`/v1/tasks/${taskId}`, { method: "PATCH", body }),
@@ -261,9 +268,6 @@ export default function TaskDetailDrawer({ taskId, onClose }: { taskId: string; 
 
         <div className="mb-4 flex flex-wrap items-center gap-2">
           {task.issue_key && <span className="chip tnum bg-indigo-50 font-bold text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300">{task.issue_key}</span>}
-          <span className="chip bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300 tnum">
-            {fmtEstimateLogged(task.logged_minutes, task.estimate_minutes)}
-          </span>
           {task.memberships.map((m) => (
             <span key={m.sprint_id} className="chip bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">
               {m.sprint_name}
@@ -432,64 +436,127 @@ export default function TaskDetailDrawer({ taskId, onClose }: { taskId: string; 
           </div>
         </div>
 
-        {/* time entries */}
-        <div className="mb-4">
-          <div className="mb-1.5 flex items-center justify-between text-xs font-medium text-slate-500">
-            <span>زمان‌های ثبت‌شده</span>
-            <span className="tnum">{fmtDuration(task.logged_minutes)}</span>
-          </div>
-          <div className="space-y-1.5">
-            {task.entries.map((e) => {
-              const parts = utcToZonedParts(new Date(e.start_at), tz);
-              return (
-                <div key={e.id} className="flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs dark:bg-slate-800/60">
-                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: e.area_color ?? "#94a3b8" }} />
-                  <span className="w-24 shrink-0">{faDate({ y: parts.y, m: parts.m, d: parts.d }, { withYear: false })}</span>
-                  <span className="tnum flex-1 text-slate-500">
-                    {String(parts.h).padStart(2, "0")}:{String(parts.min).padStart(2, "0")} · {fmtDuration(e.minutes)}
-                  </span>
-                  {e.billable && <span className="chip bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">فاکتور</span>}
-                  <button className="btn-ghost !p-1" onClick={() => deleteEntry.mutate(e.id)}>
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              );
-            })}
-            {task.entries.length === 0 && <div className="text-xs text-slate-400">هنوز زمانی ثبت نشده.</div>}
+        {/* time */}
+        <div className="mb-4 space-y-2">
+          {/* total */}
+          <div className="rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-800/60">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-500">مجموع ثبت‌شده</span>
+              <span className="tnum text-sm font-extrabold text-slate-700 dark:text-slate-200">
+                {fmtEstimateLogged(task.logged_minutes, task.estimate_minutes)}
+              </span>
+            </div>
+            {task.estimate_minutes ? (
+              <ProgressBar value={task.logged_minutes} max={task.estimate_minutes} className="mt-2" />
+            ) : null}
           </div>
 
-          <div className="mt-2 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
-            <div className="mb-2 text-xs font-semibold">ثبت سریع زمان</div>
-            <div className="flex flex-wrap items-center gap-2">
+          {/* new entry form */}
+          <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">ثبت زمان جدید</span>
+              <span
+                className={`chip tnum ${
+                  validRange
+                    ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300"
+                    : "bg-slate-100 text-slate-400 dark:bg-slate-800"
+                }`}
+              >
+                {durLabel}
+              </span>
+            </div>
+            <div className="space-y-2">
               <DatePicker
                 calendar={persian}
                 locale={persian_fa}
                 value={quickLog.date}
                 onChange={(d: DateObject | null) => setQuickLog((q) => ({ ...q, date: d }))}
-                inputClass="input tnum !w-32"
+                inputClass="input tnum w-full text-center"
                 placeholder="امروز"
                 format="YYYY/MM/DD"
                 editable={false}
               />
-              <input type="time" className="input tnum !w-28" value={quickLog.start} onChange={(e) => setQuickLog((q) => ({ ...q, start: e.target.value }))} />
-              <span className="text-slate-400">تا</span>
-              <input type="time" className="input tnum !w-28" value={quickLog.end} onChange={(e) => setQuickLog((q) => ({ ...q, end: e.target.value }))} />
-              <Toggle
-                checked={quickLog.billable ?? false}
-                onChange={(v) => setQuickLog((q) => ({ ...q, billable: v }))}
-                label="فاکتور"
-              />
-            </div>
-            <div className="mt-2 flex gap-1.5">
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="time"
+                  className="input tnum min-w-0 flex-1 !px-2 text-center"
+                  value={quickLog.start}
+                  onChange={(e) => setQuickLog((q) => ({ ...q, start: e.target.value }))}
+                />
+                <span className="shrink-0 text-xs text-slate-400">تا</span>
+                <input
+                  type="time"
+                  className="input tnum min-w-0 flex-1 !px-2 text-center"
+                  value={quickLog.end}
+                  onChange={(e) => setQuickLog((q) => ({ ...q, end: e.target.value }))}
+                />
+              </div>
               <input
                 className="input"
                 placeholder="یادداشت (اختیاری)"
                 value={quickLog.note}
                 onChange={(e) => setQuickLog((q) => ({ ...q, note: e.target.value }))}
               />
-              <button className="btn-primary shrink-0" disabled={createEntry.isPending} onClick={() => createEntry.mutate()}>
-                ثبت
-              </button>
+              <div className="flex items-center justify-between pt-0.5">
+                <Toggle
+                  checked={quickLog.billable ?? false}
+                  onChange={(v) => setQuickLog((q) => ({ ...q, billable: v }))}
+                  label="قابل‌صدور فاکتور"
+                />
+                <button
+                  className="btn-primary !px-5"
+                  disabled={!validRange || createEntry.isPending}
+                  onClick={() => createEntry.mutate()}
+                >
+                  ثبت
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* history */}
+          <div>
+            <div className="mb-1.5 text-xs font-medium text-slate-500">
+              ثبت‌شده‌ها <span className="tnum text-slate-400">({toFa(task.entries.length)})</span>
+            </div>
+            <div className="space-y-1">
+              {task.entries.map((e) => {
+                const parts = utcToZonedParts(new Date(e.start_at), tz);
+                const endAbs = parts.h * 60 + parts.min + e.minutes;
+                const endLabel = `${String(Math.floor(endAbs / 60) % 24).padStart(2, "0")}:${String(endAbs % 60).padStart(2, "0")}`;
+                return (
+                  <div
+                    key={e.id}
+                    className="group flex items-center gap-2 rounded-xl border border-slate-100 bg-white px-2.5 py-2 text-xs dark:border-slate-800 dark:bg-slate-800/40"
+                  >
+                    <span className="h-9 w-1 shrink-0 rounded-full" style={{ backgroundColor: e.area_color ?? "#94a3b8" }} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="w-24 shrink-0 font-medium text-slate-600 dark:text-slate-300">
+                          {faDate({ y: parts.y, m: parts.m, d: parts.d }, { withYear: false })}
+                        </span>
+                        <span className="tnum text-slate-500 dark:text-slate-400">
+                          {String(parts.h).padStart(2, "0")}:{String(parts.min).padStart(2, "0")}–{endLabel}
+                        </span>
+                        {e.billable && (
+                          <span className="chip bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">فاکتور</span>
+                        )}
+                      </div>
+                      {e.note && <div className="truncate text-[11px] text-slate-400">{e.note}</div>}
+                    </div>
+                    <span className="tnum shrink-0 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                      {fmtDuration(e.minutes)}
+                    </span>
+                    <button
+                      className="btn-ghost !p-1 opacity-0 transition group-hover:opacity-100 hover:!text-red-500"
+                      onClick={() => deleteEntry.mutate(e.id)}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                );
+              })}
+              {task.entries.length === 0 && <div className="text-xs text-slate-400">هنوز زمانی ثبت نشده.</div>}
             </div>
           </div>
         </div>
