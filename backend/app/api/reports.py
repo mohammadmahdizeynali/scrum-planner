@@ -7,7 +7,7 @@ from app.core.timeutils import jalali_month_of, to_utc
 from app.db import get_db
 from app.deps import get_current_user
 from app.models import Sprint, User, utcnow
-from app.services.reports import build_monthly_payload
+from app.services.reports import build_monthly_payload, build_trend_payload
 from app.services.sprints import build_weekly_payload
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -25,6 +25,16 @@ def weekly_report(sprint_id: uuid.UUID, user: User = Depends(get_current_user), 
         "sprint_status": sprint.status,
         **sprint.report.payload,
     }
+
+
+@router.get("/trends")
+def trends(
+    weeks: int = Query(default=8, ge=2, le=26),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Live per-week totals for the last N sprints — trend charts data."""
+    return build_trend_payload(db, user, weeks)
 
 
 @router.get("/monthly")

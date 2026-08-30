@@ -206,6 +206,22 @@ export interface MonthlyReport extends BaseReport {
   weeks: { sprint_id: string; name: string; status: string; minutes: number; full_overlap: boolean }[];
 }
 
+export interface TrendWeek {
+  sprint_id: string;
+  name: string;
+  start_at: string;
+  end_at: string;
+  status: string;
+  total_minutes: number;
+  billable_minutes: number;
+  estimate_minutes: number;
+  areas: { area_id: string | null; name: string; color: string; minutes: number }[];
+}
+
+export interface TrendData {
+  weeks: TrendWeek[];
+}
+
 export interface TaskListResponse {
   items: Task[];
   total: number;

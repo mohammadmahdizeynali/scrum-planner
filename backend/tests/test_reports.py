@@ -120,3 +120,51 @@ def test_timezone_week_boundary(auth_client):
         assert total == 30
     finally:
         db.close()
+
+
+def test_trend_payload_weeks(auth_client, area, project):
+    from datetime import datetime as dt
+
+    from app.core.timeutils import week_start_utc
+    from app.services.reports import build_trend_payload
+
+    t = auth_client.post(
+        "/api/v1/tasks",
+        json={"title": "trend task", "project_id": project["id"], "estimate_minutes": 120},
+    ).json()
+    current = auth_client.get("/api/v1/sprints/current").json()
+    if current["status"] == "closed":
+        auth_client.post(f"/api/v1/sprints/{current['id']}/reopen")
+    auth_client.post(f"/api/v1/sprints/{current['id']}/tasks", json={"items": [{"task_id": t["id"]}]})
+    start = week_start_utc(dt.now(timezone.utc), "Asia/Tehran")
+    r = auth_client.post("/api/v1/time-entries", json={
+        "task_id": t["id"],
+        "start_at": (start + timedelta(days=1, hours=9)).isoformat(),
+        "end_at": (start + timedelta(days=1, hours=11)).isoformat(),
+        "billable": True,
+    })
+    assert r.status_code == 200, r.text
+
+    from app.db import SessionLocal
+
+    db = SessionLocal()
+    try:
+        from sqlalchemy import select
+
+        from app.models import User
+
+        user = db.scalars(select(User)).first()
+        payload = build_trend_payload(db, user, weeks=8)
+    finally:
+        db.close()
+
+    weeks = payload["weeks"]
+    assert len(weeks) >= 1
+    this_week = [w for w in weeks if w["total_minutes"] > 0]
+    assert len(this_week) >= 1
+    w = this_week[-1]
+    assert w["total_minutes"] == 120
+    assert w["billable_minutes"] == 120
+    assert w["estimate_minutes"] >= 120
+    area_row = w["areas"][0]
+    assert area_row["name"] == "University" and area_row["minutes"] == 120

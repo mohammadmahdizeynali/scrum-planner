@@ -1,8 +1,8 @@
-"""Report building: live monthly report + helpers shared with weekly payloads."""
+"""Report building: live monthly report + trends + helpers shared with weekly payloads."""
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.timeutils import (
@@ -13,6 +13,83 @@ from app.core.timeutils import (
 )
 from app.models import Sprint, SprintMembership, Task, TaskStatus, TimeEntry, User
 from app.services.sprints import LocationResolver
+
+
+def build_trend_payload(db: Session, user: User, weeks: int = 8) -> dict:
+    """Live per-week totals for the last `weeks` sprints: total/billable logged,
+    per-area split, and the sum of member estimates — the raw material for the
+    trend charts and the estimate-accuracy verdict."""
+    resolve = LocationResolver(db)
+    sprints = db.scalars(
+        select(Sprint)
+        .where(Sprint.user_id == user.id)
+        .order_by(Sprint.start_at.desc())
+        .limit(max(1, min(weeks, 26)))
+    ).all()
+    sprints.reverse()
+    if not sprints:
+        return {"weeks": []}
+
+    window_start = sprints[0].start_at
+    window_end = max(s.end_at for s in sprints)
+
+    members_by_sprint = {
+        s.id: set(
+            db.scalars(select(SprintMembership.task_id).where(SprintMembership.sprint_id == s.id)).all()
+        )
+        for s in sprints
+    }
+
+    entry_rows = (
+        db.query(TimeEntry, Task)
+        .join(Task, Task.id == TimeEntry.task_id)
+        .filter(TimeEntry.user_id == user.id, TimeEntry.start_at >= window_start, TimeEntry.start_at < window_end)
+        .all()
+    )
+
+    weeks_data = {
+        s.id: {"sprint": s, "total": 0, "billable": 0, "areas": {}}
+        for s in sprints
+    }
+    for e, task in entry_rows:
+        for s in sprints:
+            if s.start_at <= e.start_at < s.end_at and e.task_id in members_by_sprint[s.id]:
+                wd = weeks_data[s.id]
+                wd["total"] += e.minutes
+                if e.billable:
+                    wd["billable"] += e.minutes
+                area_id, name, color, _p, _pn = resolve(task)
+                key = area_id if area_id else "__standalone__"
+                bucket = wd["areas"].setdefault(
+                    key, {"area_id": area_id, "name": name, "color": color, "minutes": 0}
+                )
+                bucket["minutes"] += e.minutes
+                break
+
+    out_weeks = []
+    for s in sprints:
+        wd = weeks_data[s.id]
+        est = (
+            db.query(func.sum(Task.estimate_minutes))
+            .join(SprintMembership, SprintMembership.task_id == Task.id)
+            .filter(SprintMembership.sprint_id == s.id)
+            .scalar()
+        )
+        out_weeks.append(
+            {
+                "sprint_id": s.id,
+                "name": s.name,
+                "start_at": s.start_at,
+                "end_at": s.end_at,
+                "status": s.status,
+                "total_minutes": wd["total"],
+                "billable_minutes": wd["billable"],
+                "estimate_minutes": int(est or 0),
+                "areas": sorted(wd["areas"].values(), key=lambda a: -a["minutes"]),
+            }
+        )
+
+    return {"weeks": out_weeks}
 
 
 def build_monthly_payload(db: Session, user: User, jy: int, jm: int) -> dict:

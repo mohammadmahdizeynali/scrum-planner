@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, BarChart3, CheckCircle2, ChevronLeft, ChevronRight, Clock, FileArchive, Wallet } from "lucide-react";
 import { api } from "../../api/client";
-import type { BaseReport, MonthlyReport, Project, WeeklyReport } from "../../api/types";
+import type { BaseReport, MonthlyReport, Project, TrendData, WeeklyReport } from "../../api/types";
 import { EmptyState, PageSpinner, ProgressBar } from "../../components/ui";
 import { faDate, faMonth, faPercent, fmtDuration, JALALI_MONTHS, toFa } from "../../lib/format";
 import { toJalali } from "../../lib/jalaali";
@@ -467,6 +467,8 @@ export default function ReportsPage() {
         </div>
       </div>
 
+      <TrendCharts tz={tz} />
+
       {monthly.data && monthly.data.total_minutes === 0 && monthly.data.completed.length === 0 ? (
         <EmptyState
           icon={<BarChart3 size={36} />}
@@ -521,4 +523,118 @@ export default function ReportsPage() {
 function utcToParts(iso: string, tz: string) {
   const p = utcToZonedParts(new Date(iso), tz);
   return { y: p.y, m: p.m, d: p.d };
+}
+
+// ---------------- Trend charts (last 8 sprints) ----------------
+
+function TrendCharts({ tz }: { tz: string }) {
+  const { data } = useQuery({
+    queryKey: ["trends"],
+    queryFn: () => api<TrendData>("/v1/reports/trends"),
+  });
+  const weeks = data?.weeks ?? [];
+  if (weeks.length === 0) return null;
+
+  const maxVal = Math.max(
+    ...weeks.map((w) => Math.max(w.total_minutes, w.estimate_minutes)),
+    1
+  );
+  const chartH = 140;
+
+  const legend: { key: string; name: string; color: string }[] = [];
+  const seen = new Set<string>();
+  for (const w of weeks)
+    for (const a of w.areas) {
+      const k = a.area_id ?? a.name;
+      if (!seen.has(k)) {
+        seen.add(k);
+        legend.push({ key: k, name: a.name, color: a.color });
+      }
+    }
+
+  // estimate-accuracy verdict: compare avg |logged - estimate| of the older
+  // half vs the newer half (only weeks with an estimate).
+  const scored = weeks.filter((w) => w.estimate_minutes > 0);
+  let verdict: string | null = null;
+  if (scored.length >= 4) {
+    const half = Math.floor(scored.length / 2);
+    const avg = (arr: typeof scored) =>
+      arr.reduce((s, w) => s + Math.abs(w.total_minutes - w.estimate_minutes), 0) / arr.length;
+    const oldAvg = avg(scored.slice(0, half));
+    const newAvg = avg(scored.slice(half));
+    if (newAvg < oldAvg * 0.9) verdict = "دقت برآوردهایت در حال بهبود است 👌";
+    else if (newAvg > oldAvg * 1.1) verdict = "دقت برآوردهایت افت کرده — شاید تسک‌ها را بزرگ‌تر برآورد کنی.";
+  }
+
+  return (
+    <div className="card p-5">
+      <h3 className="mb-1 font-bold">روند ۸ هفتهٔ اخیر</h3>
+      <p className="mb-4 text-xs text-slate-400">
+        میله‌ها = ساعات ثبت‌شده هر هفته (رنگ‌ها = حوزه‌ها) · خط‌چین = برآورد همان هفته
+      </p>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {weeks.map((w) => {
+          const startParts = utcToZonedParts(new Date(w.start_at), tz);
+          const delta = w.total_minutes - w.estimate_minutes;
+          return (
+            <div key={w.sprint_id} className="flex min-w-[52px] flex-1 flex-col items-center gap-1">
+              <div className="relative flex w-full items-end justify-center" style={{ height: chartH }}>
+                {w.estimate_minutes > 0 && (
+                  <div
+                    className="absolute inset-x-0 z-10 border-t-2 border-dashed border-slate-400/80"
+                    style={{ bottom: `${(w.estimate_minutes / maxVal) * chartH}px` }}
+                    title={`برآورد: ${fmtDuration(w.estimate_minutes)}`}
+                  />
+                )}
+                <div
+                  className="flex w-7 flex-col-reverse overflow-hidden rounded-t-md"
+                  style={{ height: `${(w.total_minutes / maxVal) * chartH}px` }}
+                  title={`ثبت‌شده: ${fmtDuration(w.total_minutes)}`}
+                >
+                  {w.areas.map((a) => (
+                    <div
+                      key={a.area_id ?? a.name}
+                      style={{
+                        height: `${(a.minutes / Math.max(w.total_minutes, 1)) * 100}%`,
+                        backgroundColor: a.color,
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <span className="tnum text-[10px] text-slate-500 dark:text-slate-400">
+                {w.total_minutes > 0 ? fmtDuration(w.total_minutes) : "—"}
+              </span>
+              <span className="text-[10px] text-slate-400">{faDate({ y: startParts.y, m: startParts.m, d: startParts.d }, { withYear: false })}</span>
+              {w.estimate_minutes > 0 && delta !== 0 && new Date(w.end_at).getTime() < Date.now() ? (
+                <span className={`tnum text-[10px] font-semibold ${delta > 0 ? "text-red-500" : "text-emerald-500"}`}>
+                  {delta > 0 ? "+" : "−"}
+                  {fmtDuration(Math.abs(delta))}
+                </span>
+              ) : (
+                <span className="text-[10px]"> </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+        {legend.map((l) => (
+          <span key={l.key} className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: l.color }} />
+            {l.name}
+          </span>
+        ))}
+        <span className="flex items-center gap-1 text-slate-400">
+          <span className="inline-block w-4 border-t-2 border-dashed border-slate-400" />
+          برآورد
+        </span>
+      </div>
+      {verdict && (
+        <div className="mt-3 rounded-xl bg-indigo-50 px-3 py-2 text-xs text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">
+          {verdict}
+        </div>
+      )}
+    </div>
+  );
 }
