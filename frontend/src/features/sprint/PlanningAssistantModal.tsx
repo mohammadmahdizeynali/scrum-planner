@@ -139,7 +139,7 @@ export default function PlanningAssistantModal({
       </div>
       <div className="flex items-center justify-between">
         <span className="tnum text-xs text-slate-400">
-          {n > 0 ? `برآورد مجموع: ${fmtDuration(sumEst(suggestions, checked, estimates))}` : ""}
+          {n > 0 ? `مجموع برآورد: ${fmtDuration(sumEst(suggestions, checked, estimates))}` : ""}
         </span>
         <span className="flex gap-2">
           <button className="btn-secondary" onClick={onClose}>

@@ -12,6 +12,7 @@ from app.core.timeutils import (
     to_utc,
 )
 from app.models import Sprint, SprintMembership, Task, TaskStatus, TimeEntry, User
+from app.services.builders import effective_start, entry_window_filter
 from app.services.sprints import LocationResolver
 
 
@@ -43,7 +44,10 @@ def build_trend_payload(db: Session, user: User, weeks: int = 8) -> dict:
     entry_rows = (
         db.query(TimeEntry, Task)
         .join(Task, Task.id == TimeEntry.task_id)
-        .filter(TimeEntry.user_id == user.id, TimeEntry.start_at >= window_start, TimeEntry.start_at < window_end)
+        .filter(
+            TimeEntry.user_id == user.id,
+            entry_window_filter(window_start, window_end, user.timezone),
+        )
         .all()
     )
 
@@ -52,8 +56,9 @@ def build_trend_payload(db: Session, user: User, weeks: int = 8) -> dict:
         for s in sprints
     }
     for e, task in entry_rows:
+        at = effective_start(e)
         for s in sprints:
-            if s.start_at <= e.start_at < s.end_at and e.task_id in members_by_sprint[s.id]:
+            if s.start_at <= at < s.end_at and e.task_id in members_by_sprint[s.id]:
                 wd = weeks_data[s.id]
                 wd["total"] += e.minutes
                 if e.billable:
@@ -99,7 +104,10 @@ def build_monthly_payload(db: Session, user: User, jy: int, jm: int) -> dict:
     entry_rows = (
         db.query(TimeEntry, Task)
         .join(Task, Task.id == TimeEntry.task_id)
-        .filter(TimeEntry.user_id == user.id, TimeEntry.start_at >= start, TimeEntry.start_at < end)
+        .filter(
+            TimeEntry.user_id == user.id,
+            entry_window_filter(start, end, user.timezone),
+        )
         .all()
     )
 
@@ -213,8 +221,7 @@ def build_monthly_payload(db: Session, user: User, jy: int, jm: int) -> dict:
             .join(SprintMembership, SprintMembership.task_id == Task.id)
             .filter(
                 SprintMembership.sprint_id == sprint.id,
-                TimeEntry.start_at >= seg_start,
-                TimeEntry.start_at < seg_end,
+                entry_window_filter(seg_start, seg_end, user.timezone),
                 TimeEntry.user_id == user.id,
             )
             .with_entities(TimeEntry.minutes)

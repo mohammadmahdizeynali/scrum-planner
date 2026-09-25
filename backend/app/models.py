@@ -1,6 +1,6 @@
 import enum
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 
 from sqlalchemy import (
     JSON,
@@ -12,6 +12,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    Time,
     UniqueConstraint,
     Uuid,
 )
@@ -33,6 +34,11 @@ class TaskStatus(str, enum.Enum):
     open = "open"
     in_progress = "in_progress"
     closed = "closed"
+
+
+class TaskType(str, enum.Enum):
+    todo = "todo"          # only completion matters — no time logging
+    timed = "timed"        # duration and details matter — logs, estimates, timesheet
 
 
 class TaskPriority(str, enum.Enum):
@@ -90,6 +96,7 @@ class Area(Base):
     billable_default: Mapped[bool] = mapped_column(Boolean, default=False)
     key_prefix: Mapped[str | None] = mapped_column(String(16), unique=True)  # e.g. "SBU" → tasks SBU-001
     task_counter: Mapped[int] = mapped_column(Integer, default=0)
+    default_task_type: Mapped[str | None] = mapped_column(String(16))  # None → timed
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -105,17 +112,32 @@ class Area(Base):
 
 class Project(Base):
     __tablename__ = "projects"
+    __table_args__ = (
+        # A subproject's parent must itself be a top-level project (depth 1 only).
+        CheckConstraint(
+            "parent_project_id IS NULL OR parent_project_id <> id",
+            name="ck_project_parent_not_self",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     area_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("areas.id", ondelete="CASCADE"), index=True)
+    parent_project_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )  # set → this row is a subproject/course
     name: Mapped[str] = mapped_column(String(128))
     color: Mapped[str | None] = mapped_column(String(9), default=None)
+    key_prefix: Mapped[str | None] = mapped_column(String(16))  # e.g. "MCDA" → tasks MCDA-001
+    task_counter: Mapped[int] = mapped_column(Integer, default=0)
+    default_task_type: Mapped[str | None] = mapped_column(String(16))  # None → area default → timed
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     area: Mapped[Area] = relationship(back_populates="projects")
+    parent: Mapped["Project | None"] = relationship(remote_side="Project.id", backref="subprojects")
     tasks: Mapped[list["Task"]] = relationship(
         foreign_keys="Task.project_id", passive_deletes=True,
     )
@@ -138,8 +160,10 @@ class Task(Base):
     estimate_minutes: Mapped[int | None] = mapped_column(Integer)
     priority: Mapped[str] = mapped_column(String(16), default=TaskPriority.medium.value, index=True)
     status: Mapped[str] = mapped_column(String(16), default=TaskStatus.backlog.value, index=True)
+    task_type: Mapped[str] = mapped_column(String(16), default=TaskType.timed.value, index=True)  # todo | timed
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     due_date: Mapped[date | None] = mapped_column(Date)
+    due_time: Mapped[time | None] = mapped_column(Time)  # optional time-of-day on top of due_date
     issue_key: Mapped[str | None] = mapped_column(String(24), unique=True)  # e.g. "SBU-001" (immutable)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # soft-hide; data kept
     recurrence_rule: Mapped[dict | None] = mapped_column(JSON)
@@ -234,15 +258,22 @@ class SprintMembership(Base):
 class TimeEntry(Base):
     __tablename__ = "time_entries"
     __table_args__ = (
-        CheckConstraint("end_at > start_at", name="ck_entry_order"),
+        # Either a real session (start → end) or a duration-only log
+        # (both times NULL, attributed to logged_date).
+        CheckConstraint(
+            "(start_at IS NULL AND end_at IS NULL) OR (end_at > start_at)",
+            name="ck_entry_order",
+        ),
         CheckConstraint("minutes > 0 AND minutes <= 1440", name="ck_entry_minutes"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     task_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), index=True)
-    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
-    end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Duration-only entries: no start/end, the whole amount is attributed to this day.
+    logged_date: Mapped[date | None] = mapped_column(Date, index=True)
     minutes: Mapped[int] = mapped_column(Integer)
     note: Mapped[str | None] = mapped_column(Text)
     billable: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -250,6 +281,37 @@ class TimeEntry(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     task: Mapped[Task] = relationship(back_populates="entries")
+
+
+class TaskDependency(Base):
+    """A blocking edge: `blocker` blocks `blocked` (Jira-style «blocks»)."""
+
+    __tablename__ = "task_dependencies"
+    __table_args__ = (
+        UniqueConstraint("blocker_id", "blocked_id", name="uq_dependency_edge"),
+        CheckConstraint("blocker_id <> blocked_id", name="ck_dependency_not_self"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    blocker_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), index=True)
+    blocked_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Event(Base):
+    """Standalone calendar event: title + date + optional time (no task, no sprint)."""
+
+    __tablename__ = "events"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(512))
+    event_date: Mapped[date] = mapped_column(Date, index=True)
+    event_time: Mapped[time | None] = mapped_column(Time)
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class WeeklyReport(Base):

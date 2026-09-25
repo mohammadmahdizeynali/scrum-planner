@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.serialize import jsonable
@@ -21,7 +21,7 @@ from app.models import (
     WeeklyReport,
     utcnow,
 )
-from app.services.builders import _task_core_select, build_task_outs
+from app.services.builders import _task_core_select, build_task_outs, entry_window_filter
 from app.services.recurrence import create_next_occurrence, task_has_recurrence
 
 
@@ -176,6 +176,8 @@ def close_sprint(db: Session, user: User, sprint: Sprint, decisions) -> dict:
         elif action == "close":
             task.status = TaskStatus.closed.value
             task.closed_at = now
+            if task.archived_at is None:
+                task.archived_at = now
             create_next_occurrence(db, user, task)
 
     sprint.status = SprintStatus.closed.value
@@ -205,10 +207,12 @@ def reopen_sprint(db: Session, user: User, sprint: Sprint) -> None:
 
 
 def sprint_members_with_tasks(db: Session, sprint: Sprint):
+    # Archived tasks stay listed: closed tasks are auto-archived but must keep
+    # showing on the sprint board's done column.
     rows = (
         db.query(SprintMembership, Task)
         .join(Task, Task.id == SprintMembership.task_id)
-        .filter(SprintMembership.sprint_id == sprint.id, Task.archived_at.is_(None))
+        .filter(SprintMembership.sprint_id == sprint.id)
         .all()
     )
     if not rows:
@@ -228,8 +232,7 @@ def build_weekly_payload(db: Session, user: User, sprint: Sprint) -> dict:
         .join(SprintMembership, SprintMembership.task_id == Task.id)
         .filter(
             SprintMembership.sprint_id == sprint.id,
-            TimeEntry.start_at >= sprint.start_at,
-            TimeEntry.start_at < sprint.end_at,
+            entry_window_filter(sprint.start_at, sprint.end_at, user.timezone),
             TimeEntry.user_id == user.id,
         )
         .all()
@@ -381,12 +384,20 @@ def planning_suggestions(db: Session, user: User, sprint: Sprint) -> list[dict]:
         return []
 
     prev_start = sprint.start_at - timedelta(days=7)
+    tz = get_tz(user.timezone)
     prev_logged = set(
         db.scalars(
             select(TimeEntry.task_id).where(
                 TimeEntry.user_id == user.id,
-                TimeEntry.start_at >= prev_start,
-                TimeEntry.start_at < sprint.start_at,
+                or_(
+                    and_(TimeEntry.start_at.isnot(None), TimeEntry.start_at >= prev_start, TimeEntry.start_at < sprint.start_at),
+                    and_(
+                        TimeEntry.start_at.is_(None),
+                        TimeEntry.logged_date.isnot(None),
+                        TimeEntry.logged_date >= (prev_start.astimezone(tz).date()),
+                        TimeEntry.logged_date < (sprint.start_at.astimezone(tz).date()),
+                    ),
+                ),
             )
         ).all()
     )

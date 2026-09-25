@@ -16,9 +16,24 @@ is used from desktop and mobile browsers, and installs as a PWA.
   donut charts
 - Built-in backups: a self-restoring ZIP (database + config + restore script) every Saturday
   02:00 + a one-click manual backup — delivered to Telegram and/or a private GitHub repo
-- **Jira-style issue keys**: each area defines a Latin prefix (e.g. `SBU`); tasks get
-  `SBU-001`, `SBU-002` … — immutable identity, searchable everywhere (even sloppy input like
-  `sbu-2`), and existing tasks are retro-keyed when a prefix is set
+- **Jira-style issue keys**: each area, project, or subproject can define a Latin prefix
+  (2–5 chars, e.g. `SBU`, `MCDA`); tasks get `SBU-001`, `MCDA-001` … from the nearest prefixed
+  ancestor — immutable identity, searchable everywhere (even sloppy input like `sbu-2`), and
+  existing tasks are retro-keyed when a prefix is set
+- **Two task types (v1.1.0)**: every path, project, and sprint supports both **فقط انجام**
+  (To-Do — only completion matters, no time logging) and **زمان‌دار** (time-tracked — logs,
+  estimates, timesheet) tasks, with configurable per-area/project defaults
+- **Dependencies & deadlines (v1.1.0)**: tasks can block each other by issue key («سد شده»
+  badge, blocks/blocked-by in the task drawer); deadlines carry an optional time of day;
+  standalone events and current-vs-next-sprint due dates live in the sprint page's
+  «برنامه هفته» panel
+- **Subprojects & project lifecycle (v1.1.0)**: مسیر → پروژه → زیرپروژه → tasks hierarchy;
+  projects and subprojects can be closed independently and stay available for history
+- **Duration-only logging & auto-archive (v1.1.0)**: log a total like `2h 30 min` for a day
+  without a start/end range; completed tasks move to the archive automatically (and stay
+  searchable / on the sprint board until removed)
+- **Sprint structure view (v1.1.0)**: a Jira-Structure-inspired hierarchical board
+  (area → project → subproject → tasks) next to the classic kanban
 - **Planning assistant**: reason-tagged suggestions (overdue / due this week / logged last
   week / recurring) in a dismissable panel on empty sprints — confirm adds them via the normal
   flow; recurring tasks are auto-injected into every new sprint

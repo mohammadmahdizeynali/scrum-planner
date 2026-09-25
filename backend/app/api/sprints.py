@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -16,11 +16,12 @@ from app.schemas import (
     SprintOut,
 )
 from app.services import sprints as sprint_service
+from app.services.builders import entry_window_filter
 
 router = APIRouter(prefix="/sprints", tags=["sprints"])
 
 
-def _detail(db: Session, sprint: Sprint) -> SprintDetail:
+def _detail(db: Session, sprint: Sprint, user: User) -> SprintDetail:
     members = sprint_service.sprint_members_with_tasks(db, sprint)
     ids = [t["id"] for _, t in members]
     logged = 0
@@ -32,8 +33,7 @@ def _detail(db: Session, sprint: Sprint) -> SprintDetail:
             .join(SprintMembership, SprintMembership.task_id == Task.id)
             .filter(
                 SprintMembership.sprint_id == sprint.id,
-                TimeEntry.start_at >= sprint.start_at,
-                TimeEntry.start_at < sprint.end_at,
+                entry_window_filter(sprint.start_at, sprint.end_at, user.timezone),
             )
             .first()
         )
@@ -60,7 +60,7 @@ def _detail(db: Session, sprint: Sprint) -> SprintDetail:
 @router.get("/current", response_model=SprintDetail)
 def get_current_sprint(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     sprint = sprint_service.current_sprint(db, user)
-    return _detail(db, sprint)
+    return _detail(db, sprint, user)
 
 
 @router.get("/current/suggestions")
@@ -90,12 +90,33 @@ def list_sprints(
     return db.scalars(q.limit(200)).all()
 
 
+@router.get("/next", response_model=SprintDetail | None)
+def get_next_sprint(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """The sprint following the current one, if it exists yet (e.g. created by
+    an early close or carry-over). Used for the current/next scheduled view."""
+    current = sprint_service.current_sprint(db, user)
+    nxt = db.scalar(select(Sprint).where(Sprint.user_id == user.id, Sprint.start_at == current.end_at))
+    return _detail(db, nxt, user) if nxt is not None else None
+
+
 @router.get("/{sprint_id}", response_model=SprintDetail)
 def get_sprint(sprint_id: uuid.UUID, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     sprint = db.get(Sprint, sprint_id)
     if sprint is None or sprint.user_id != user.id:
         raise HTTPException(status_code=404, detail="اسپرینت پیدا نشد.")
-    return _detail(db, sprint)
+    return _detail(db, sprint, user)
+
+
+
+@router.post("/current/tasks", response_model=SprintDetail)
+def add_task_to_current_sprint(body: SprintAddTasksIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Shortcut used by the Warehouse quick-add: resolve the current sprint
+    and add tasks to it in one call."""
+    sprint = sprint_service.current_sprint(db, user)
+    if sprint.status != "active":
+        raise HTTPException(status_code=409, detail="اسپرینت این هفته بسته شده است؛ ابتدا بازگشایی کنید.")
+    sprint_service.add_tasks_to_sprint(db, user, sprint, body.items)
+    return _detail(db, sprint, user)
 
 
 @router.post("/{sprint_id}/tasks", response_model=SprintDetail)
@@ -106,7 +127,7 @@ def add_tasks(sprint_id: uuid.UUID, body: SprintAddTasksIn, user: User = Depends
     if sprint.status != "active":
         raise HTTPException(status_code=409, detail="به اسپرینت بسته‌شده نمی‌توان تسک اضافه کرد.")
     sprint_service.add_tasks_to_sprint(db, user, sprint, body.items)
-    return _detail(db, sprint)
+    return _detail(db, sprint, user)
 
 
 @router.delete("/{sprint_id}/tasks/{task_id}", response_model=SprintDetail)
@@ -117,7 +138,7 @@ def remove_task(sprint_id: uuid.UUID, task_id: uuid.UUID, user: User = Depends(g
     if sprint.status != "active":
         raise HTTPException(status_code=409, detail="این اسپرینت بسته شده است؛ برای تغییر، ابتدا بازگشایی کنید.")
     sprint_service.remove_task_from_sprint(db, user, sprint, task_id)
-    return _detail(db, sprint)
+    return _detail(db, sprint, user)
 
 
 @router.post("/{sprint_id}/close")
@@ -134,4 +155,4 @@ def reopen_sprint(sprint_id: uuid.UUID, user: User = Depends(get_current_user), 
     if sprint is None or sprint.user_id != user.id:
         raise HTTPException(status_code=404, detail="اسپرینت پیدا نشد.")
     sprint_service.reopen_sprint(db, user, sprint)
-    return _detail(db, sprint)
+    return _detail(db, sprint, user)

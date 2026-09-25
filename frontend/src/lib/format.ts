@@ -137,6 +137,36 @@ export const STATUS_COLORS: Record<string, string> = {
   closed: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300",
 };
 
+/** Task types: To-Do (completion only) vs Time-tracked (duration + details). */
+export const TYPE_FA: Record<string, string> = {
+  todo: "فقط انجام",
+  timed: "زمان‌دار",
+};
+
+export const TYPE_COLORS: Record<string, string> = {
+  todo: "bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300",
+  timed: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300",
+};
+
+/** "1405/07/04" or null —gregorian YYYY-MM-DD → Jalali digits string. */
+export function faDueDate(dueDate: string | null): string | null {
+  if (!dueDate) return null;
+  const [y, m, d] = dueDate.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return faDate({ y, m, d });
+}
+
+/** Full due label: Jalali date + optional HH:MM. */
+export function faDueLabel(dueDate: string | null, dueTime?: string | null): string | null {
+  const datePart = faDueDate(dueDate);
+  if (!datePart) return null;
+  if (dueTime) {
+    const [h, m] = dueTime.split(":");
+    return `${datePart} – ${toFa(h)}:${toFa(m)}`;
+  }
+  return datePart;
+}
+
 export function gregorianYMD(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");

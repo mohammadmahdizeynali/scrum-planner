@@ -14,7 +14,7 @@ import html
 from datetime import datetime, time, timedelta, timezone
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 
 from app.core.config import settings
 from app.core.timeutils import (
@@ -169,7 +169,13 @@ def evening_summary_text(db, user, now: datetime | None = None) -> str:
     rows = (
         db.query(TimeEntry, Task)
         .join(Task, Task.id == TimeEntry.task_id)
-        .filter(TimeEntry.user_id == user.id, TimeEntry.start_at >= day_start, TimeEntry.start_at < day_end)
+        .filter(
+            TimeEntry.user_id == user.id,
+            or_(
+                and_(TimeEntry.start_at.isnot(None), TimeEntry.start_at >= day_start, TimeEntry.start_at < day_end),
+                and_(TimeEntry.start_at.is_(None), TimeEntry.logged_date == local_now.date()),
+            ),
+        )
         .order_by(TimeEntry.start_at)
         .all()
     )

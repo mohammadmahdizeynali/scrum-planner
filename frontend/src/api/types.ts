@@ -36,6 +36,7 @@ export interface Area {
   color: string;
   billable_default: boolean;
   key_prefix: string | null;
+  default_task_type: "todo" | "timed" | null;
   sort_order: number;
   project_count: number;
   task_count: number;
@@ -46,6 +47,10 @@ export interface Project {
   area_id: string;
   name: string;
   color: string | null;
+  parent_project_id: string | null;
+  key_prefix: string | null;
+  default_task_type: "todo" | "timed" | null;
+  closed_at: string | null;
   sort_order: number;
   task_count: number;
 }
@@ -57,21 +62,29 @@ export interface DeletePreview {
   logged_minutes: number;
 }
 
+export type TaskType = "todo" | "timed";
+
 export interface Task {
   id: string;
   title: string;
   status: "backlog" | "open" | "in_progress" | "closed";
   priority: "high" | "medium" | "low";
+  task_type: TaskType;
   estimate_minutes: number | null;
   logged_minutes: number;
   due_date: string | null;
+  due_time: string | null;
   issue_key: string | null;
+  archived: boolean;
+  is_blocked: boolean;
   area_id: string | null;
   project_id: string | null;
   area_name: string | null;
   area_color: string | null;
   area_billable_default: boolean | null;
   project_name: string | null;
+  parent_project_id: string | null;
+  parent_project_name: string | null;
   active_sprint_id: string | null;
   tags: Tag[];
   subtask_total: number;
@@ -85,11 +98,19 @@ export interface TimeEntryRef {
   task_id: string;
   task_title: string;
   area_color: string | null;
-  start_at: string;
-  end_at: string;
+  start_at: string | null;
+  end_at: string | null;
+  logged_date: string | null;
   minutes: number;
   note: string | null;
   billable: boolean;
+}
+
+export interface TaskBrief {
+  id: string;
+  title: string;
+  issue_key: string | null;
+  status: string;
 }
 
 export interface TaskDetail extends Task {
@@ -101,6 +122,8 @@ export interface TaskDetail extends Task {
   subtasks: Subtask[];
   memberships: SprintBrief[];
   entries: TimeEntryRef[];
+  blocked_by: TaskBrief[];
+  blocks: TaskBrief[];
 }
 
 export interface SprintBrief {
@@ -282,4 +305,13 @@ export interface BackupRunResult {
   size: number;
   trigger: string;
   deliveries: BackupDelivery[];
+}
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  event_date: string;
+  event_time: string | null;
+  note: string;
+  updated_at: string;
 }

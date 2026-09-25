@@ -58,3 +58,41 @@ auto-transition to `Open` is a convenience nudge, matching the owner's described
 - **Timezone:** all storage in UTC; display computed in the user's timezone (default `Asia/Tehran`).
 - **Honesty marker:** items marked **[Proposal]** in notes are defaults I chose that the owner
   has not explicitly vetoed yet. See `decisions.md`.
+
+## Task Types (v1.1.0)
+
+Every task has a first-class type — the **dual task-type model** (owner note):
+
+| Type | fa | Meaning |
+| --- | --- | --- |
+| `todo` | فقط انجام | Only completion matters. No time logging, no estimate, hidden from the timesheet picker. |
+| `timed` | زمان‌دار | Duration and details matter: logs, estimates, timesheet, billable. |
+
+Defaults resolve explicitly-set > project (or parent project) `default_task_type` >
+area `default_task_type` > `timed`. Areas, projects, subprojects, and sprints all
+hold a mix of both types; the UI badges them «فقط انجام» / «زمان‌دار».
+
+## Hierarchy & Keys (v1.1.0)
+
+`Area (مسیر) → Project → Subproject/Course → Task`. A subproject is a `Project` row
+with `parent_project_id` set (depth 1 only). Areas and projects (incl. subprojects)
+can carry an **issue key** — 2–5 Latin chars, letters+digits, starting with a letter,
+unique across areas **and** projects (one namespace). Task keys generate from the
+nearest prefixed ancestor: direct project → parent project → area (`MCDA-001`).
+
+## New v1.1.0 concepts
+
+- **Blocking/dependency** — `TaskDependency` edge; «سد شده» badge when a non-closed
+  blocker exists; `blocks`/`blocked_by` listed in the task drawer; tasks are linked
+  by issue key.
+- **Duration-only time entry** — a `TimeEntry` with no start/end, attributed to a
+  `logged_date` (e.g. `2h 30 min` for the day/sprint). Shown in the drawer, the
+  timesheet's «ثبت‌های مدت‌دار» strip, and counted in all totals/reports.
+- **Event (رویداد)** — standalone calendar item (title/date/time), managed from the
+  sprint page's «برنامه هفته» panel.
+- **Project close** — `closed_at` on projects/subprojects; closed ones leave the
+  active lists, stay browsable via the مسیرها page, and can reopen.
+- **Auto-archive** — closing a task (manually or at sprint close) sets `archived_at`
+  automatically; archived tasks remain on the sprint board and searchable.
+- **Sprint structure view** — Jira-Structure-inspired hierarchical board (area →
+  project → subproject → tasks) alongside the kanban, toggled per user.

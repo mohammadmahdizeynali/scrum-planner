@@ -222,6 +222,22 @@ export function AreaChip({ name, color }: { name: string | null; color: string |
   );
 }
 
+const TYPE_STYLES: Record<string, string> = {
+  todo: "bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300",
+  timed: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300",
+};
+const TYPE_LABELS: Record<string, string> = { todo: "فقط انجام", timed: "زمان‌دار" };
+
+export function TypeBadge({ type }: { type: string }) {
+  return <span className={cn("chip", TYPE_STYLES[type] ?? TYPE_STYLES.timed)}>{TYPE_LABELS[type] ?? type}</span>;
+}
+
+/** Small «سد شده» chip for tasks with unfinished blockers. */
+export function BlockedBadge({ blocked }: { blocked: boolean }) {
+  if (!blocked) return null;
+  return <span className="chip bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300">سد شده</span>;
+}
+
 export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
   return (
     <button

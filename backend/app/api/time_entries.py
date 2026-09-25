@@ -67,7 +67,7 @@ def list_entries(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return entries_for_range(db, user.id, to_utc(start), to_utc(end))
+    return entries_for_range(db, user.id, to_utc(start), to_utc(end), tz_name=user.timezone)
 
 
 @router.post("", response_model=EntryOut)
@@ -75,16 +75,31 @@ def create_entry(body: EntryIn, user: User = Depends(get_current_user), db: Sess
     task = db.get(Task, body.task_id)
     if task is None or task.user_id != user.id:
         raise HTTPException(status_code=404, detail="تسک پیدا نشد.")
-    start, end, minutes = _validate_times(body.start_at, body.end_at)
-    e = TimeEntry(
-        user_id=user.id,
-        task_id=task.id,
-        start_at=start,
-        end_at=end,
-        minutes=minutes,
-        note=body.note,
-        billable=body.billable if body.billable is not None else _default_billable(db, task),
-    )
+    billable = body.billable if body.billable is not None else _default_billable(db, task)
+    if body.start_at is not None:
+        # Session mode: a real start → end block.
+        start, end, minutes = _validate_times(body.start_at, body.end_at)
+        e = TimeEntry(
+            user_id=user.id,
+            task_id=task.id,
+            start_at=start,
+            end_at=end,
+            minutes=minutes,
+            note=body.note,
+            billable=billable,
+        )
+    else:
+        # Duration mode: just an amount (e.g. 2h 30m) attributed to a day.
+        e = TimeEntry(
+            user_id=user.id,
+            task_id=task.id,
+            start_at=None,
+            end_at=None,
+            logged_date=body.logged_date,
+            minutes=body.minutes,
+            note=body.note,
+            billable=billable,
+        )
     db.add(e)
     db.commit()
     db.refresh(e)
@@ -95,12 +110,29 @@ def create_entry(body: EntryIn, user: User = Depends(get_current_user), db: Sess
 def update_entry(entry_id: uuid.UUID, body: EntryUpdateIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     e = _get_entry(db, user, entry_id)
     data = body.model_dump(exclude_unset=True)
-    start = to_utc(data["start_at"]) if "start_at" in data and data["start_at"] is not None else e.start_at
-    end = to_utc(data["end_at"]) if "end_at" in data and data["end_at"] is not None else e.end_at
-    start, end, minutes = _validate_times(start, end)
-    e.start_at = start
-    e.end_at = end
-    e.minutes = minutes
+    wants_session = data.get("start_at") is not None or data.get("end_at") is not None
+    if wants_session:
+        start = to_utc(data["start_at"]) if data.get("start_at") is not None else e.start_at
+        end = to_utc(data["end_at"]) if data.get("end_at") is not None else e.end_at
+        if start is None or end is None:
+            raise HTTPException(status_code=422, detail="برای ثبت بازه‌ای، زمان شروع و پایان هر دو لازم است.")
+        start, end, minutes = _validate_times(start, end)
+        e.start_at = start
+        e.end_at = end
+        e.logged_date = None
+        e.minutes = minutes
+    elif data.get("minutes") is not None or "logged_date" in data:
+        # Duration mode (or switching a session into one).
+        e.start_at = None
+        e.end_at = None
+        if data.get("minutes") is not None:
+            e.minutes = data["minutes"]
+        if data.get("logged_date") is not None:
+            e.logged_date = data["logged_date"]
+        elif e.logged_date is None:
+            from datetime import datetime, timezone
+
+            e.logged_date = datetime.now(timezone.utc).date()
     if "task_id" in data and data["task_id"] is not None:
         task = db.get(Task, data["task_id"])
         if task is None or task.user_id != user.id:

@@ -8,16 +8,17 @@ import DateObjectCtor from "react-date-object";
 import { Trash2, X, Plus } from "lucide-react";
 import { api } from "../../api/client";
 import type { Area, Project, TaskDetail } from "../../api/types";
-import { ConfirmDialog, DurationInput, Field, PriorityBadge, ProgressBar, Spinner, Toggle, useToast } from "../../components/ui";
+import { ConfirmDialog, DurationInput, Field, PriorityBadge, ProgressBar, Spinner, Toggle, TypeBadge, useToast } from "../../components/ui";
 import {
   faDate,
   fmtDuration,
   fmtEstimateLogged,
+  gregorianYMD,
   minutesOfClock,
   toFa,
   PRIORITY_FA,
   STATUS_FA,
-  gregorianYMD,
+  TYPE_FA,
 } from "../../lib/format";
 import { utcToZonedParts } from "../../lib/tz";
 
@@ -49,6 +50,9 @@ export default function TaskDetailDrawer({ taskId, onClose }: { taskId: string; 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [preview, setPreview] = useState<{ time_entries: number; logged_minutes: number } | null>(null);
   const [newSubtask, setNewSubtask] = useState("");
+  const [logMode, setLogMode] = useState<"session" | "duration">("session");
+  const [durationMin, setDurationMin] = useState<number | null>(null);
+  const [depKey, setDepKey] = useState("");
   const [quickLog, setQuickLog] = useState<{ date: DateObject | null; start: string; end: string; note: string; billable: boolean | null }>({
     date: null,
     start: "09:00",
@@ -56,6 +60,10 @@ export default function TaskDetailDrawer({ taskId, onClose }: { taskId: string; 
     note: "",
     billable: null,
   });
+  const [dueTime, setDueTime] = useState(task?.due_time?.slice(0, 5) ?? "");
+  useEffect(() => {
+    setDueTime(task?.due_time?.slice(0, 5) ?? "");
+  }, [task?.id, task?.due_time]);
 
   useEffect(() => {
     if (task && quickLog.billable === null) {
@@ -125,6 +133,19 @@ export default function TaskDetailDrawer({ taskId, onClose }: { taskId: string; 
 
   const createEntry = useMutation({
     mutationFn: () => {
+      if (logMode === "duration") {
+        const date = quickLog.date?.toDate() ?? new Date();
+        return api("/v1/time-entries", {
+          method: "POST",
+          body: {
+            task_id: taskId,
+            minutes: durationMin,
+            logged_date: gregorianYMD(date),
+            note: quickLog.note || null,
+            billable: quickLog.billable,
+          },
+        });
+      }
       const date = quickLog.date?.toDate() ?? new Date();
       const [sh, sm] = quickLog.start.split(":").map(Number);
       const [eh, em] = quickLog.end.split(":").map(Number);
@@ -154,6 +175,30 @@ export default function TaskDetailDrawer({ taskId, onClose }: { taskId: string; 
       qc.invalidateQueries({ queryKey: ["sprint"] });
       toast.push("زمان ثبت شد.");
       setQuickLog((q) => ({ ...q, note: "" }));
+      setDurationMin(null);
+    },
+    onError: (e) => toast.push((e as Error).message, "error"),
+  });
+
+  const addDependency = useMutation({
+    mutationFn: () => api(`/v1/tasks/${taskId}/dependencies`, { method: "POST", body: { blocker_ref: depKey.trim() } }),
+    onSuccess: () => {
+      setDepKey("");
+      qc.invalidateQueries({ queryKey: ["task", taskId] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["sprint"] });
+      toast.push("وابستگی ثبت شد.");
+    },
+    onError: (e) => toast.push((e as Error).message, "error"),
+  });
+
+  const removeDependency = useMutation({
+    mutationFn: ({ blockedId, blockerId }: { blockedId: string; blockerId: string }) =>
+      api(`/v1/tasks/${blockedId}/dependencies/${blockerId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["task", taskId] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["sprint"] });
     },
     onError: (e) => toast.push((e as Error).message, "error"),
   });
@@ -263,22 +308,103 @@ export default function TaskDetailDrawer({ taskId, onClose }: { taskId: string; 
               ))}
             </select>
           </Field>
-          <Field label="برآورد" hint="خالی = بدون برآورد">
-            <DurationInput
-              minutes={task.estimate_minutes}
-              onChangeMinutes={(v) => {
-                if (v === null) {
-                  if (task.estimate_minutes) patch.mutate({ clear_estimate: true });
-                } else if (v !== task.estimate_minutes) {
-                  patch.mutate({ estimate_minutes: v });
-                }
-              }}
-            />
+          <Field label="نوع تسک">
+            <select
+              className="input"
+              value={task.task_type}
+              onChange={(e) => patch.mutate({ task_type: e.target.value })}
+            >
+              {Object.entries(TYPE_FA).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
+            </select>
           </Field>
+          {task.task_type === "timed" && (
+            <Field label="برآورد" hint="خالی = بدون برآورد">
+              <DurationInput
+                minutes={task.estimate_minutes}
+                onChangeMinutes={(v) => {
+                  if (v === null) {
+                    if (task.estimate_minutes) patch.mutate({ clear_estimate: true });
+                  } else if (v !== task.estimate_minutes) {
+                    patch.mutate({ estimate_minutes: v });
+                  }
+                }}
+              />
+            </Field>
+          )}
+        </div>
+
+        {/* dependencies */}
+        <div className="mb-4 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">وابستگی‌ها</span>
+            {task.is_blocked && (
+              <span className="chip bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300">سد شده</span>
+            )}
+          </div>
+          {task.blocked_by.length > 0 && (
+            <div className="mb-1.5">
+              <div className="mb-1 text-[11px] text-slate-400">سد شده توسط</div>
+              {task.blocked_by.map((b) => (
+                <div key={b.id} className="flex items-center gap-1.5 py-0.5 text-xs">
+                  {b.issue_key && <span className="chip tnum bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">{b.issue_key}</span>}
+                  <span className="min-w-0 flex-1 truncate">{b.title}</span>
+                  <span className={`chip ${b.status === "closed" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"}`}>
+                    {STATUS_FA[b.status] ?? b.status}
+                  </span>
+                  <button
+                    className="btn-ghost !p-0.5 text-slate-400 hover:!text-red-500"
+                    title="حذف وابستگی"
+                    onClick={() => removeDependency.mutate({ blockedId: task.id, blockerId: b.id })}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {task.blocks.length > 0 && (
+            <div className="mb-1.5">
+              <div className="mb-1 text-[11px] text-slate-400">سد می‌کند</div>
+              {task.blocks.map((b) => (
+                <div key={b.id} className="flex items-center gap-1.5 py-0.5 text-xs">
+                  {b.issue_key && <span className="chip tnum bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">{b.issue_key}</span>}
+                  <span className="min-w-0 flex-1 truncate">{b.title}</span>
+                  <span className={`chip ${b.status === "closed" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"}`}>
+                    {STATUS_FA[b.status] ?? b.status}
+                  </span>
+                  <button
+                    className="btn-ghost !p-0.5 text-slate-400 hover:!text-red-500"
+                    title="حذف وابستگی"
+                    onClick={() => removeDependency.mutate({ blockedId: b.id, blockerId: task.id })}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-1.5 pt-1">
+            <input
+              className="input tnum flex-1"
+              placeholder="کلید تسک سدکننده، مثل MCDA-2"
+              value={depKey}
+              onChange={(e) => setDepKey(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && depKey.trim() && addDependency.mutate()}
+              dir="ltr"
+            />
+            <button className="btn-secondary shrink-0" disabled={!depKey.trim() || addDependency.isPending} onClick={() => addDependency.mutate()}>
+              <Plus size={14} />
+            </button>
+          </div>
         </div>
 
         <div className="mb-4 flex flex-wrap items-center gap-2">
           {task.issue_key && <span className="chip tnum bg-indigo-50 font-bold text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300">{task.issue_key}</span>}
+          <TypeBadge type={task.task_type} />
           {task.memberships.map((m) => (
             <span key={m.sprint_id} className="chip bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">
               {m.sprint_name}
@@ -338,19 +464,42 @@ export default function TaskDetailDrawer({ taskId, onClose }: { taskId: string; 
         {/* due date + recurrence */}
         <div className="mb-4 grid grid-cols-2 gap-2">
           <Field label="مهلت">
-            <DatePicker
-              calendar={persian}
-              locale={persian_fa}
-              value={duePickerValue}
-              onChange={(d: DateObject | null) => {
-                if (d && d.isValid) patch.mutate({ due_date: gregorianYMD(d.toDate()) });
-                else patch.mutate({ clear_due_date: true });
-              }}
-              inputClass="input tnum"
-              placeholder="بدون مهلت"
-              editable={false}
-              format="YYYY/MM/DD"
-            />
+            <div className="flex items-center gap-1">
+              <DatePicker
+                calendar={persian}
+                locale={persian_fa}
+                value={duePickerValue}
+                onChange={(d: DateObject | null) => {
+                  if (d && d.isValid) patch.mutate({ due_date: gregorianYMD(d.toDate()) });
+                  else patch.mutate({ clear_due_date: true, clear_due_time: true });
+                }}
+                inputClass="input tnum min-w-0 flex-1"
+                placeholder="بدون مهلت"
+                editable={false}
+                format="YYYY/MM/DD"
+              />
+              {task.due_date && (
+                <input
+                  type="time"
+                  className="input tnum !w-[5.5rem] shrink-0 !px-1.5"
+                  value={dueTime}
+                  onChange={(e) => {
+                    setDueTime(e.target.value);
+                    if (e.target.value) patch.mutate({ due_time: e.target.value });
+                  }}
+                  title="ساعت مهلت"
+                />
+              )}
+              {task.due_date && (
+                <button
+                  className="btn-ghost shrink-0 !p-1 text-slate-400 hover:!text-red-500"
+                  title="حذف مهلت"
+                  onClick={() => patch.mutate({ clear_due_date: true, clear_due_time: true })}
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
           </Field>
           <Field label="تکرار">
             <select
@@ -447,7 +596,8 @@ export default function TaskDetailDrawer({ taskId, onClose }: { taskId: string; 
           </div>
         </div>
 
-        {/* time */}
+        {/* time (time-tracked tasks only — To-Do tasks complete without logs) */}
+        {task.task_type === "timed" ? (
         <div className="mb-4 space-y-2">
           {/* total */}
           <div className="rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-800/60">
@@ -465,15 +615,28 @@ export default function TaskDetailDrawer({ taskId, onClose }: { taskId: string; 
           {/* new entry form */}
           <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
             <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">ثبت زمان جدید</span>
+              <div className="flex overflow-hidden rounded-lg border border-slate-300 text-xs dark:border-slate-600">
+                <button
+                  className={`px-2.5 py-1 transition ${logMode === "session" ? "bg-indigo-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"}`}
+                  onClick={() => setLogMode("session")}
+                >
+                  بازه
+                </button>
+                <button
+                  className={`px-2.5 py-1 transition ${logMode === "duration" ? "bg-indigo-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"}`}
+                  onClick={() => setLogMode("duration")}
+                >
+                  مجموع
+                </button>
+              </div>
               <span
                 className={`chip tnum ${
-                  validRange
+                  (logMode === "session" ? validRange : (durationMin ?? 0) > 0)
                     ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300"
                     : "bg-slate-100 text-slate-400 dark:bg-slate-800"
                 }`}
               >
-                {durLabel}
+                {logMode === "session" ? durLabel : fmtDuration(durationMin ?? 0)}
               </span>
             </div>
             <div className="space-y-2">
@@ -487,21 +650,27 @@ export default function TaskDetailDrawer({ taskId, onClose }: { taskId: string; 
                 format="YYYY/MM/DD"
                 editable={false}
               />
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="time"
-                  className="input tnum min-w-0 flex-1 !px-2 text-center"
-                  value={quickLog.start}
-                  onChange={(e) => setQuickLog((q) => ({ ...q, start: e.target.value }))}
-                />
-                <span className="shrink-0 text-xs text-slate-400">تا</span>
-                <input
-                  type="time"
-                  className="input tnum min-w-0 flex-1 !px-2 text-center"
-                  value={quickLog.end}
-                  onChange={(e) => setQuickLog((q) => ({ ...q, end: e.target.value }))}
-                />
-              </div>
+              {logMode === "session" ? (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="time"
+                    className="input tnum min-w-0 flex-1 !px-2 text-center"
+                    value={quickLog.start}
+                    onChange={(e) => setQuickLog((q) => ({ ...q, start: e.target.value }))}
+                  />
+                  <span className="shrink-0 text-xs text-slate-400">تا</span>
+                  <input
+                    type="time"
+                    className="input tnum min-w-0 flex-1 !px-2 text-center"
+                    value={quickLog.end}
+                    onChange={(e) => setQuickLog((q) => ({ ...q, end: e.target.value }))}
+                  />
+                </div>
+              ) : (
+                <div className="flex items-center justify-center gap-1.5">
+                  <DurationInput minutes={durationMin} onChangeMinutes={setDurationMin} />
+                </div>
+              )}
               <input
                 className="input"
                 placeholder="یادداشت (اختیاری)"
@@ -516,7 +685,7 @@ export default function TaskDetailDrawer({ taskId, onClose }: { taskId: string; 
                 />
                 <button
                   className="btn-primary !px-5"
-                  disabled={!validRange || createEntry.isPending}
+                  disabled={!(logMode === "session" ? validRange : (durationMin ?? 0) > 0) || createEntry.isPending}
                   onClick={() => createEntry.mutate()}
                 >
                   ثبت
@@ -532,6 +701,41 @@ export default function TaskDetailDrawer({ taskId, onClose }: { taskId: string; 
             </div>
             <div className="space-y-1">
               {task.entries.map((e) => {
+                // Duration-only entries have no session window — show the day + total.
+                if (e.start_at == null) {
+                  const [yy, mm, dd] = (e.logged_date ?? "").split("-").map(Number);
+                  return (
+                    <div
+                      key={e.id}
+                      className="group flex items-center gap-2 rounded-xl border border-slate-100 bg-white px-2.5 py-2 text-xs dark:border-slate-800 dark:bg-slate-800/40"
+                    >
+                      <span className="h-9 w-1 shrink-0 rounded-full" style={{ backgroundColor: e.area_color ?? "#94a3b8" }} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          {yy && mm && dd && (
+                            <span className="w-24 shrink-0 font-medium text-slate-600 dark:text-slate-300">
+                              {faDate({ y: yy, m: mm, d: dd }, { withYear: false })}
+                            </span>
+                          )}
+                          <span className="chip bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300">مجموع</span>
+                          {e.billable && (
+                            <span className="chip bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">فاکتور</span>
+                          )}
+                        </div>
+                        {e.note && <div className="truncate text-[11px] text-slate-400">{e.note}</div>}
+                      </div>
+                      <span className="tnum shrink-0 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                        {fmtDuration(e.minutes)}
+                      </span>
+                      <button
+                        className="btn-ghost !p-1 opacity-0 transition group-hover:opacity-100 hover:!text-red-500"
+                        onClick={() => deleteEntry.mutate(e.id)}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  );
+                }
                 const parts = utcToZonedParts(new Date(e.start_at), tz);
                 const endAbs = parts.h * 60 + parts.min + e.minutes;
                 const endLabel = `${String(Math.floor(endAbs / 60) % 24).padStart(2, "0")}:${String(endAbs % 60).padStart(2, "0")}`;
@@ -571,6 +775,11 @@ export default function TaskDetailDrawer({ taskId, onClose }: { taskId: string; 
             </div>
           </div>
         </div>
+        ) : (
+          <div className="mb-4 rounded-xl bg-teal-50 px-3 py-2.5 text-xs leading-5 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300">
+            این تسک «فقط انجام» است — انجام‌شدنش کافی است و نیاز به ثبت زمان ندارد.
+          </div>
+        )}
 
         <div className="flex items-center justify-between border-t border-slate-200 pt-3 dark:border-slate-800">
           <button

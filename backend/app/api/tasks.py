@@ -8,8 +8,25 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_user
-from app.models import Area, Project, Sprint, SprintMembership, Subtask, Tag, Task, TaskPriority, TaskStatus, TaskTag, TimeEntry, User, utcnow
+from app.models import (
+    Area,
+    Project,
+    Sprint,
+    SprintMembership,
+    Subtask,
+    Tag,
+    Task,
+    TaskDependency,
+    TaskPriority,
+    TaskStatus,
+    TaskTag,
+    TaskType,
+    TimeEntry,
+    User,
+    utcnow,
+)
 from app.schemas import (
+    DependencyAddIn,
     DeletePreviewOut,
     SubtaskIn,
     SubtaskOut,
@@ -22,6 +39,7 @@ from app.schemas import (
     TaskUpdateIn,
 )
 from app.services.builders import build_task_detail, build_task_outs, _task_core_select
+from app.services.issue_keys import effective_key_holder, next_key
 from app.services.recurrence import create_next_occurrence
 
 router = APIRouter(tags=["tasks"])
@@ -42,6 +60,18 @@ def _validate_parents(db: Session, user: User, area_id, project_id):
     return (None, None)
 
 
+def _default_task_type(db: Session, area: Area | None, project: Project | None) -> str:
+    """Explicit choice > project (or its parent) > area > timed."""
+    p = project
+    while p is not None:
+        if p.default_task_type:
+            return p.default_task_type
+        p = db.get(Project, p.parent_project_id) if p.parent_project_id else None
+    if area is not None and area.default_task_type:
+        return area.default_task_type
+    return TaskType.timed.value
+
+
 def _set_tags(db: Session, user: User, task: Task, tag_ids: list[uuid.UUID]) -> None:
     task.tag_links.clear()
     for tid in dict.fromkeys(tag_ids):  # dedupe, keep order
@@ -56,6 +86,7 @@ def list_tasks(
     area_id: uuid.UUID | None = None,
     project_id: uuid.UUID | None = None,
     status: str | None = Query(default=None, pattern="^(backlog|open|in_progress|closed)$"),
+    task_type: str | None = Query(default=None, pattern="^(todo|timed)$"),
     priority: str | None = Query(default=None, pattern="^(high|medium|low)$"),
     tag_id: uuid.UUID | None = None,
     q: str | None = None,
@@ -72,6 +103,10 @@ def list_tasks(
     conds = [Task.user_id == user.id]
     if archived:
         conds.append(Task.archived_at.isnot(None))
+    elif q:
+        # Explicit search reaches into the archive too — closed tasks are
+        # auto-archived, and a deliberate lookup should still find them.
+        pass
     else:
         conds.append(Task.archived_at.is_(None))
     if area_id is not None:
@@ -80,6 +115,8 @@ def list_tasks(
         conds.append(Task.project_id == project_id)
     if status:
         conds.append(Task.status == status)
+    if task_type:
+        conds.append(Task.task_type == task_type)
     if priority:
         conds.append(Task.priority == priority)
     if standalone:
@@ -121,14 +158,17 @@ def list_tasks(
 def create_task(body: TaskCreateIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     area_id, project_id = _validate_parents(db, user, body.area_id, body.project_id)
     area = None
+    project = None
     if project_id is not None:
-        area = db.get(Area, db.get(Project, project_id).area_id)
+        project = db.get(Project, project_id)
+        area = db.get(Area, project.area_id)
     elif area_id is not None:
         area = db.get(Area, area_id)
-    issue_key = None
-    if area is not None and area.key_prefix:
-        area.task_counter = (area.task_counter or 0) + 1
-        issue_key = f"{area.key_prefix}-{area.task_counter:03d}"
+    # Key prefix chain: direct project → parent project → area.
+    holder = effective_key_holder(db, project)
+    if holder is None and area is not None and area.key_prefix:
+        holder = area
+    issue_key = next_key(db, holder) if holder is not None else None
     task = Task(
         user_id=user.id,
         title=body.title.strip(),
@@ -137,9 +177,11 @@ def create_task(body: TaskCreateIn, user: User = Depends(get_current_user), db: 
         estimate_minutes=body.estimate_minutes,
         priority=TaskPriority(body.priority).value,
         status=TaskStatus.backlog.value,
+        task_type=body.task_type or _default_task_type(db, area, project),
         area_id=area_id,
         project_id=project_id,
         due_date=body.due_date,
+        due_time=body.due_time,
         recurrence_rule=body.recurrence_rule,
         issue_key=issue_key,
     )
@@ -233,16 +275,20 @@ def update_task(task_id: uuid.UUID, body: TaskUpdateIn, user: User = Depends(get
             task.area_id = area_id
             task.project_id = None
 
-    simple_fields = ["title", "description", "notes", "estimate_minutes", "priority", "due_date", "recurrence_rule"]
+    simple_fields = ["title", "description", "notes", "estimate_minutes", "priority", "due_date", "due_time", "recurrence_rule"]
     for f in simple_fields:
         if f in data and data[f] is not None:
             setattr(task, f, data[f])
     if data.get("priority") is not None:
         task.priority = TaskPriority(data["priority"]).value
+    if data.get("task_type") is not None:
+        task.task_type = TaskType(data["task_type"]).value
     if data.get("clear_estimate"):
         task.estimate_minutes = None
     if data.get("clear_due_date"):
         task.due_date = None
+    if data.get("clear_due_time"):
+        task.due_time = None
     if data.get("clear_recurrence"):
         task.recurrence_rule = None
     if data.get("tag_ids") is not None:
@@ -254,10 +300,16 @@ def update_task(task_id: uuid.UUID, body: TaskUpdateIn, user: User = Depends(get
         if new_status == TaskStatus.closed.value and old_status != TaskStatus.closed.value:
             task.status = new_status
             task.closed_at = utcnow()
+            # Completed tasks move to the archive automatically; they stay
+            # visible on the sprint board until removed and remain restorable.
+            if task.archived_at is None:
+                task.archived_at = utcnow()
             create_next_occurrence(db, user, task)
         elif new_status != TaskStatus.closed.value and old_status == TaskStatus.closed.value:
             task.status = new_status
             task.closed_at = None
+            # Reopening brings the task back out of the (auto-)archive.
+            task.archived_at = None
         else:
             task.status = new_status
 
@@ -309,6 +361,59 @@ def delete_task(task_id: uuid.UUID, user: User = Depends(get_current_user), db: 
     db.delete(task)
     db.commit()
     return {"ok": True}
+
+
+# ---------------- Dependencies (blocking) ----------------
+
+_KEY_SEARCH_RE = re.compile(r"^([a-zA-Z]{2,10})[-/ _]?(\d{1,6})$")
+
+
+def _resolve_blocker(db: Session, user: User, body: DependencyAddIn) -> Task:
+    if body.blocker_id is not None:
+        blocker = db.get(Task, body.blocker_id)
+        if blocker is None or blocker.user_id != user.id:
+            raise HTTPException(status_code=404, detail="تسکِ سدکننده پیدا نشد.")
+        return blocker
+    raw = (body.blocker_ref or "").strip()
+    m = _KEY_SEARCH_RE.match(raw)
+    key = f"{m.group(1).upper()}-{int(m.group(2)):03d}" if m else raw.upper()
+    blocker = db.scalar(select(Task).where(Task.user_id == user.id, Task.issue_key == key))
+    if blocker is None:
+        raise HTTPException(status_code=404, detail=f"تسکی با کلید «{raw}» پیدا نشد.")
+    return blocker
+
+
+@router.post("/tasks/{task_id}/dependencies", response_model=TaskDetail)
+def add_dependency(task_id: uuid.UUID, body: DependencyAddIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    task = db.get(Task, task_id)
+    if task is None or task.user_id != user.id:
+        raise HTTPException(status_code=404, detail="تسک پیدا نشد.")
+    blocker = _resolve_blocker(db, user, body)
+    if blocker.id == task.id:
+        raise HTTPException(status_code=422, detail="یک تسک نمی‌تواند خودش را سد کند.")
+    existing = db.scalar(
+        select(TaskDependency).where(TaskDependency.blocker_id == blocker.id, TaskDependency.blocked_id == task.id)
+    )
+    if existing is None:
+        db.add(TaskDependency(user_id=user.id, blocker_id=blocker.id, blocked_id=task.id))
+        db.commit()
+    db.refresh(task)
+    return TaskDetail(**build_task_detail(db, task))
+
+
+@router.delete("/tasks/{task_id}/dependencies/{blocker_id}", response_model=TaskDetail)
+def remove_dependency(task_id: uuid.UUID, blocker_id: uuid.UUID, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    task = db.get(Task, task_id)
+    if task is None or task.user_id != user.id:
+        raise HTTPException(status_code=404, detail="تسک پیدا نشد.")
+    edge = db.scalar(
+        select(TaskDependency).where(TaskDependency.blocker_id == blocker_id, TaskDependency.blocked_id == task.id)
+    )
+    if edge is not None:
+        db.delete(edge)
+        db.commit()
+    db.refresh(task)
+    return TaskDetail(**build_task_detail(db, task))
 
 
 # ---------------- Subtasks ----------------

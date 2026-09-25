@@ -2,16 +2,29 @@
 
 import uuid
 
-from sqlalchemy import String, case, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import String, and_, case, exists, func, or_, select
+from sqlalchemy.orm import Session, aliased
 
-from app.models import Area, Project, Sprint, SprintMembership, Subtask, Tag, Task, TaskTag, TimeEntry
+from app.models import (
+    Area,
+    Project,
+    Sprint,
+    SprintMembership,
+    Subtask,
+    Tag,
+    Task,
+    TaskDependency,
+    TaskStatus,
+    TaskTag,
+    TimeEntry,
+)
 
 
 def _task_core_select():
     area = Area.__table__.alias("a_own")
     project = Project.__table__.alias("p_own")
     parea = Area.__table__.alias("a_via_project")
+    pparent = Project.__table__.alias("p_parent")
 
     logged = (
         select(func.coalesce(func.sum(TimeEntry.minutes), 0))
@@ -28,6 +41,15 @@ def _task_core_select():
         .correlate(Task)
         .scalar_subquery()
     )
+    # Blocked = at least one unfinished blocker task points at this task.
+    BlockerTask = aliased(Task)
+    is_blocked = (
+        select(TaskDependency.id)
+        .join(BlockerTask, BlockerTask.id == TaskDependency.blocker_id)
+        .where(TaskDependency.blocked_id == Task.id, BlockerTask.status != TaskStatus.closed.value)
+        .correlate(Task)
+        .exists()
+    )
     return (
         select(
             Task,
@@ -37,9 +59,13 @@ def _task_core_select():
             func.coalesce(area.c.color, parea.c.color).label("area_color"),
             func.coalesce(area.c.billable_default, parea.c.billable_default).label("area_billable_default"),
             project.c.name.label("project_name"),
+            pparent.c.id.label("parent_project_id"),
+            pparent.c.name.label("parent_project_name"),
+            is_blocked.label("is_blocked"),
         )
         .outerjoin(area, area.c.id == Task.area_id)
         .outerjoin(project, project.c.id == Task.project_id)
+        .outerjoin(pparent, pparent.c.id == project.c.parent_project_id)
         .outerjoin(parea, parea.c.id == project.c.area_id)
     )
 
@@ -80,23 +106,41 @@ def _attach_tags_and_subtasks(db: Session, task_ids: list[uuid.UUID], items: lis
 
 def build_task_outs(db: Session, rows) -> list[dict]:
     items = []
-    for task, logged, active_sprint_id, area_name, area_color, area_billable, project_name in rows:
+    for row in rows:
+        (
+            task,
+            logged,
+            active_sprint_id,
+            area_name,
+            area_color,
+            area_billable,
+            project_name,
+            parent_project_id,
+            parent_project_name,
+            is_blocked,
+        ) = row
         items.append(
             {
                 "id": task.id,
                 "title": task.title,
                 "status": task.status,
                 "priority": task.priority,
+                "task_type": task.task_type,
                 "estimate_minutes": task.estimate_minutes,
                 "logged_minutes": int(logged or 0),
                 "due_date": task.due_date,
+                "due_time": task.due_time,
                 "issue_key": task.issue_key,
+                "archived": task.archived_at is not None,
+                "is_blocked": bool(is_blocked),
                 "area_id": task.area_id,
                 "project_id": task.project_id,
                 "area_name": area_name,
                 "area_color": area_color,
                 "area_billable_default": bool(area_billable) if area_billable is not None else None,
                 "project_name": project_name,
+                "parent_project_id": parent_project_id,
+                "parent_project_name": parent_project_name,
                 "active_sprint_id": active_sprint_id,
                 "sort_order": task.sort_order,
                 "updated_at": task.updated_at,
@@ -106,15 +150,37 @@ def build_task_outs(db: Session, rows) -> list[dict]:
     return items
 
 
+def _dependency_briefs(db: Session, task: Task) -> tuple[list[dict], list[dict]]:
+    blocked_by = (
+        db.query(Task)
+        .join(TaskDependency, TaskDependency.blocker_id == Task.id)
+        .filter(TaskDependency.blocked_id == task.id)
+        .order_by(Task.issue_key)
+        .all()
+    )
+    blocks = (
+        db.query(Task)
+        .join(TaskDependency, TaskDependency.blocked_id == Task.id)
+        .filter(TaskDependency.blocker_id == task.id)
+        .order_by(Task.issue_key)
+        .all()
+    )
+    fmt = lambda t: {"id": t.id, "title": t.title, "issue_key": t.issue_key, "status": t.status}
+    return [fmt(t) for t in blocked_by], [fmt(t) for t in blocks]
+
+
 def build_task_detail(db: Session, task: Task) -> dict:
     row = db.execute(_task_core_select().where(Task.id == task.id)).first()
     if row is None:
         item = {
             "id": task.id, "title": task.title, "status": task.status, "priority": task.priority,
+            "task_type": task.task_type,
             "estimate_minutes": task.estimate_minutes, "logged_minutes": 0, "due_date": task.due_date,
-            "issue_key": task.issue_key,
+            "due_time": task.due_time,
+            "issue_key": task.issue_key, "archived": task.archived_at is not None, "is_blocked": False,
             "area_id": task.area_id, "project_id": task.project_id, "area_name": None,
-            "area_color": None, "area_billable_default": None, "project_name": None, "active_sprint_id": None,
+            "area_color": None, "area_billable_default": None, "project_name": None,
+            "parent_project_id": None, "parent_project_name": None, "active_sprint_id": None,
             "sort_order": task.sort_order, "updated_at": task.updated_at,
         }
     else:
@@ -136,6 +202,10 @@ def build_task_detail(db: Session, task: Task) -> dict:
         }
     )
 
+    blocked_by, blocks = _dependency_briefs(db, task)
+    item["blocked_by"] = blocked_by
+    item["blocks"] = blocks
+
     memberships = (
         db.query(SprintMembership, Sprint)
         .join(Sprint, Sprint.id == SprintMembership.sprint_id)
@@ -150,7 +220,7 @@ def build_task_detail(db: Session, task: Task) -> dict:
     entries = (
         db.query(TimeEntry)
         .filter(TimeEntry.task_id == task.id)
-        .order_by(TimeEntry.start_at.desc())
+        .order_by(TimeEntry.start_at.desc().nullslast(), TimeEntry.logged_date.desc().nullslast())
         .limit(200)
         .all()
     )
@@ -162,6 +232,7 @@ def build_task_detail(db: Session, task: Task) -> dict:
             "area_color": item.get("area_color"),
             "start_at": e.start_at,
             "end_at": e.end_at,
+            "logged_date": e.logged_date,
             "minutes": e.minutes,
             "note": e.note,
             "billable": e.billable,
@@ -179,13 +250,30 @@ def entry_out(e: TimeEntry, task_title: str = "", area_color: str | None = None)
         "area_color": area_color,
         "start_at": e.start_at,
         "end_at": e.end_at,
+        "logged_date": e.logged_date,
         "minutes": e.minutes,
         "note": e.note,
         "billable": e.billable,
     }
 
 
-def entries_for_range(db: Session, user_id, start, end) -> list[dict]:
+def effective_start(e: TimeEntry):
+    """Where an entry is attributed: the session start, or noon UTC of the
+    logged date for duration-only entries."""
+    if e.start_at is not None:
+        return e.start_at
+    if e.logged_date is not None:
+        return datetime_at_noon(e.logged_date)
+    return None
+
+
+def datetime_at_noon(d):
+    from datetime import datetime, time, timezone
+
+    return datetime.combine(d, time(12, 0), tzinfo=timezone.utc)
+
+
+def entries_for_range(db: Session, user_id, start, end, tz_name: str | None = None) -> list[dict]:
     q = (
         db.query(TimeEntry, Task, Project, Area)
         .join(Task, Task.id == TimeEntry.task_id)
@@ -193,8 +281,15 @@ def entries_for_range(db: Session, user_id, start, end) -> list[dict]:
         .outerjoin(Area, Area.id == Task.area_id)
         .filter(
             TimeEntry.user_id == user_id,
-            TimeEntry.start_at < end,
-            TimeEntry.end_at > start,
+            or_(
+                and_(TimeEntry.start_at.isnot(None), TimeEntry.start_at < end, TimeEntry.end_at > start),
+                and_(
+                    TimeEntry.start_at.is_(None),
+                    TimeEntry.logged_date.isnot(None),
+                    TimeEntry.logged_date >= local_start_date(start, tz_name),
+                    TimeEntry.logged_date <= local_end_date(end, tz_name),
+                ),
+            ),
         )
         .order_by(TimeEntry.start_at)
     )
@@ -202,3 +297,28 @@ def entries_for_range(db: Session, user_id, start, end) -> list[dict]:
     for e, task, project, area in q.all():
         out.append(entry_out(e, task_title=task.title, area_color=(area.color if area else (project.area.color if project else None))))
     return out
+
+
+def local_start_date(start_utc, tz_name):
+    from app.core.timeutils import get_tz, to_utc
+
+    return to_utc(start_utc).astimezone(get_tz(tz_name)).date()
+
+
+def local_end_date(end_utc, tz_name):
+    from datetime import timedelta
+
+    from app.core.timeutils import get_tz, to_utc
+
+    return (to_utc(end_utc) - timedelta(seconds=1)).astimezone(get_tz(tz_name)).date()
+
+
+def entry_window_filter(start_utc, end_utc, tz_name: str | None):
+    """SQL filter: sessions starting inside the window, or duration-only entries
+    logged on the window's local dates."""
+    d1 = local_start_date(start_utc, tz_name)
+    d2 = local_end_date(end_utc, tz_name)
+    return or_(
+        and_(TimeEntry.start_at.isnot(None), TimeEntry.start_at >= start_utc, TimeEntry.start_at < end_utc),
+        and_(TimeEntry.start_at.is_(None), TimeEntry.logged_date >= d1, TimeEntry.logged_date <= d2),
+    )

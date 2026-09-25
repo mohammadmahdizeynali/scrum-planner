@@ -43,7 +43,8 @@ def clean_db(client):
 
     tables = [
         "weekly_reports", "sprint_memberships", "sprints", "time_entries",
-        "task_tags", "tags", "subtasks", "tasks", "projects", "areas",
+        "task_tags", "tags", "subtasks", "task_dependencies", "events",
+        "tasks", "projects", "areas",
     ]
     with engine.begin() as conn:
         for t in tables:

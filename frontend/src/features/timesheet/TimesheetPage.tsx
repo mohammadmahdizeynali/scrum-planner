@@ -109,16 +109,30 @@ export default function TimesheetPage() {
   };
 
   // ---------- layout computation ----------
+  // Duration-only entries (no start/end) can't sit on the time grid; they're
+  // listed separately under their logged day.
   const placed: PlacedEntry[] = useMemo(() => {
     if (!entries || !days.length) return [];
     const out: PlacedEntry[] = [];
     for (const e of entries) {
+      if (!e.start_at) continue;
       const p = utcToZonedParts(new Date(e.start_at), tz);
       const idx = days.findIndex((d) => sameDay(d.parts, p));
       if (idx >= 0) out.push({ ...e, dayIndex: idx, startMin: p.h * 60 + p.min });
     }
     return out;
   }, [entries, days, tz]);
+
+  const durationEntries: (TimeEntryRef & { dayIndex: number })[] = useMemo(() => {
+    if (!entries || !days.length) return [];
+    const out: (TimeEntryRef & { dayIndex: number })[] = [];
+    for (const e of entries) {
+      if (e.start_at || !e.logged_date) continue;
+      const idx = days.findIndex((d) => d.iso === e.logged_date);
+      if (idx >= 0) out.push({ ...e, dayIndex: idx });
+    }
+    return out;
+  }, [entries, days]);
 
   const lanesByDay = useMemo(() => {
     const map: Record<number, { items: { entry: PlacedEntry; lane: number }[]; laneCount: number }> = {};
@@ -146,8 +160,9 @@ export default function TimesheetPage() {
   const dayTotals = useMemo(() => {
     const totals: number[] = Array(7).fill(0);
     for (const e of placed) totals[e.dayIndex] += e.minutes;
+    for (const e of durationEntries) totals[e.dayIndex] += e.minutes;
     return totals;
-  }, [placed]);
+  }, [placed, durationEntries]);
 
   // ---------- drag interaction ----------
   const colRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -503,6 +518,48 @@ export default function TimesheetPage() {
         onOpenCreate={(startMin, endMin) => setModal({ mode: "create", dayIndex: mobileDay, startMin, endMin })}
       />
 
+      {durationEntries.length > 0 && (
+        <div className="card mt-4 p-4">
+          <h3 className="text-sm font-bold">ثبت‌های مدت‌دار این هفته</h3>
+          <p className="mt-0.5 text-[11px] text-slate-400">بدون بازهٔ زمانی — فقط مجموعِ ثبت‌شدهٔ یک روز.</p>
+          <div className="mt-2 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+            {durationEntries.map((e) => (
+              <div
+                key={e.id}
+                className="group flex items-center gap-2 rounded-xl border border-slate-100 px-2.5 py-1.5 text-xs dark:border-slate-800"
+              >
+                <span className="h-7 w-1 shrink-0 rounded-full" style={{ backgroundColor: e.area_color ?? "#94a3b8" }} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    {e.logged_date && (
+                      <span className="tnum shrink-0 text-slate-400">
+                        {(() => {
+                          const [y, m, d] = e.logged_date!.split("-").map(Number);
+                          return faDate({ y, m, d }, { withYear: false });
+                        })()}
+                      </span>
+                    )}
+                    <span className="min-w-0 truncate font-medium">{e.task_title}</span>
+                  </div>
+                  {e.note && <div className="truncate text-[11px] text-slate-400">{e.note}</div>}
+                </div>
+                <span className="tnum shrink-0 font-semibold">{fmtDuration(e.minutes)}</span>
+                <button
+                  className="btn-ghost !p-1 opacity-0 transition group-hover:opacity-100 hover:!text-red-500"
+                  onClick={async () => {
+                    await api(`/v1/time-entries/${e.id}`, { method: "DELETE" });
+                    qc.invalidateQueries({ queryKey: ["entries"] });
+                  }}
+                  title="حذف"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {modal && (
         <EntryModal
           tz={tz}
@@ -739,7 +796,11 @@ function EntryModal({
 
   const { data: candidates, isFetching } = useQuery({
     queryKey: ["task-pick", debounced],
-    queryFn: () => api<{ items: Task[] }>("/v1/tasks", { params: { q: debounced || undefined, limit: 30, sort: "updated" } }),
+    // To-Do tasks don't take time logging — they never appear in the timesheet picker.
+    queryFn: async () => {
+      const d = await api<{ items: Task[] }>("/v1/tasks", { params: { q: debounced || undefined, limit: 30, sort: "updated" } });
+      return { items: d.items.filter((t) => t.task_type !== "todo") };
+    },
   });
 
   const { data: selectedTask } = useQuery({
